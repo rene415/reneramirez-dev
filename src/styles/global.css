@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── design tokens (single source of truth) ─────────────────── */
+:root {
+  /* day defaults */
+  --bg: #f4efe5;
+  --fg: #161311;
+  --muted: #5c554c;
+  --line: #d8d2c4;
+  --accent: #c4571e;
+
+  --transition-mode: 1200ms;
+}
+
+[data-mode='night'] {
+  --bg: #08041a;
+  --fg: #e8e8ff;
+  --muted: #9a8fbf;
+  --line: #2a1e54;
+  --accent: #ff2b8a;
+}
+
+/* ── resets ─────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { font-size: 16px; scroll-behavior: smooth; }
+
+html, body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background var(--transition-mode) ease, color var(--transition-mode) ease;
+}
+
+body { min-height: 100vh; overflow-x: hidden; }
+
+::selection { background: var(--accent); color: var(--bg); }
+
+a { color: inherit; text-decoration: none; }
+
+/* ── utility: visually hidden but available to screen readers ─ */
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+/* ── motion guard ───────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

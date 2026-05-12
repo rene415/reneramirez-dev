@@ -1,0 +1,48 @@
+---
+const buildTime = new Date().toISOString().slice(0, 16).replace('T', ' ');
+const year = new Date().getFullYear();
+---
+<footer class="footer-day">
+  <div class="row">
+    <div class="brand">reneramirez.dev</div>
+    <div class="meta">
+      <span>BUILD&nbsp;<b>{buildTime} UTC</b></span>
+      <span>PHASE&nbsp;<b>1 / SKELETON</b></span>
+      <span>&copy; {year}</span>
+    </div>
+  </div>
+  <p class="hint">
+    There's a B-side. <span aria-hidden="true">&middot;</span>
+    <span class="cue">.</span> click the dot.
+  </p>
+</footer>
+
+<style>
+  .footer-day {
+    padding: 2.5rem 0 3rem;
+    border-top: 1px solid var(--line);
+  }
+  .row {
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 1rem;
+    font-family: 'VT323', monospace;
+    font-size: 0.95rem;
+    color: var(--muted);
+  }
+  .meta { display: flex; gap: 1.25rem; flex-wrap: wrap; }
+  .meta b { color: var(--fg); font-weight: normal; }
+
+  .hint {
+    margin-top: 2rem;
+    font-family: 'VT323', monospace;
+    font-size: 0.85rem;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+  }
+  .cue {
+    color: var(--accent);
+    font-size: 1.4rem;
+    line-height: 0;
+    vertical-align: -0.15em;
+    margin: 0 0.1em;
+  }
+</style>

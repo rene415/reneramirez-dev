@@ -1,0 +1,111 @@
+---
+const projects = [
+  {
+    name: 'El Ruben’s Tamales',
+    role: 'Hosting + dev',
+    year: '2023 — ongoing',
+    url: 'https://elrubenstamales.com',
+    blurb: 'Family business. Custom WordPress on a Dockerized stack I run from this same DMZ host.',
+  },
+  {
+    name: '[Project two]',
+    role: '[Your role]',
+    year: '[Year]',
+    url: '#',
+    blurb: '[A line about the project. What it does, who it’s for, what was interesting about building it.]',
+    placeholder: true,
+  },
+  {
+    name: '[Project three]',
+    role: '[Your role]',
+    year: '[Year]',
+    url: '#',
+    blurb: '[Add 2–6 more of your hosted/client sites here — I’ll wire them up from src/data/projects.ts later.]',
+    placeholder: true,
+  },
+];
+---
+<section class="work" id="work">
+  <header class="section-head">
+    <span class="section-num">01</span>
+    <h2 class="section-title">Selected work</h2>
+  </header>
+  <ul class="grid">
+    {projects.map((p) => (
+      <li class={`tile ${p.placeholder ? 'placeholder' : ''}`}>
+        <a href={p.url} target="_blank" rel="noopener noreferrer" class="tile-link">
+          <div class="tile-meta">
+            <span>{p.year}</span>
+            <span>{p.role}</span>
+          </div>
+          <h3 class="tile-title">{p.name}</h3>
+          <p class="tile-blurb">{p.blurb}</p>
+          <span class="tile-arrow" aria-hidden="true">→</span>
+        </a>
+      </li>
+    ))}
+  </ul>
+</section>
+
+<style>
+  .work { padding: 5rem 0; border-bottom: 1px solid var(--line); }
+  .section-head { display: flex; align-items: baseline; gap: 1rem; margin-bottom: 2.5rem; }
+  .section-num {
+    font-family: 'VT323', monospace;
+    font-size: 1rem; color: var(--muted); letter-spacing: 0.1em;
+  }
+  .section-title {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-size: var(--section, clamp(1.5rem, 4vw, 2.5rem));
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+  .grid { list-style: none; display: grid; gap: 1.5rem; }
+  @media (min-width: 640px) {
+    .grid { grid-template-columns: 1fr 1fr; }
+  }
+
+  .tile {
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    transition: border-color 0.2s ease, transform 0.2s ease;
+  }
+  .tile:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .tile.placeholder { opacity: 0.55; }
+
+  .tile-link {
+    display: block;
+    padding: 1.5rem 1.5rem 1.75rem;
+    position: relative;
+    height: 100%;
+  }
+  .tile-meta {
+    display: flex; justify-content: space-between;
+    font-family: 'VT323', monospace;
+    font-size: 0.9rem;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    margin-bottom: 0.5rem;
+  }
+  .tile-title {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-size: 1.4rem;
+    font-weight: 600;
+    margin-bottom: 0.4rem;
+  }
+  .tile-blurb {
+    color: var(--muted);
+    line-height: 1.6;
+    font-size: 0.95rem;
+    padding-right: 1.5rem;
+  }
+  .tile-arrow {
+    position: absolute;
+    right: 1.25rem; bottom: 1.25rem;
+    font-family: 'VT323', monospace;
+    color: var(--accent);
+    opacity: 0;
+    transition: opacity 0.2s, transform 0.2s;
+  }
+  .tile:hover .tile-arrow { opacity: 1; transform: translateX(3px); }
+</style>

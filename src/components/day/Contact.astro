@@ -1,0 +1,62 @@
+---
+import { links } from '../../data/links';
+const github = links.find((l) => l.label === 'GitHub');
+---
+<section class="contact" id="contact">
+  <header class="section-head">
+    <span class="section-num">03</span>
+    <h2 class="section-title">Get in touch</h2>
+  </header>
+  <p class="lede">
+    Best routes: email and GitHub. The rest of the platforms live on the B-side.
+  </p>
+  <ul class="rows">
+    <li>
+      <span class="k">Email</span>
+      <a class="v" href="mailto:rene@reneramirez.me">rene@reneramirez.me</a>
+    </li>
+    {github && (
+      <li>
+        <span class="k">GitHub</span>
+        <a class="v" href={github.url} target="_blank" rel="noopener noreferrer">@{github.handle}</a>
+      </li>
+    )}
+  </ul>
+</section>
+
+<style>
+  .contact { padding: 5rem 0 6rem; }
+  .section-head { display: flex; align-items: baseline; gap: 1rem; margin-bottom: 2rem; }
+  .section-num {
+    font-family: 'VT323', monospace; font-size: 1rem; color: var(--muted); letter-spacing: 0.1em;
+  }
+  .section-title {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-size: var(--section, clamp(1.5rem, 4vw, 2.5rem));
+    font-weight: 600; letter-spacing: -0.02em;
+  }
+  .lede {
+    color: var(--muted);
+    max-width: 48ch;
+    line-height: 1.6;
+    margin-bottom: 1.5rem;
+  }
+  .rows { list-style: none; display: grid; gap: 0.6rem; max-width: 28rem; }
+  .rows li {
+    display: grid; grid-template-columns: 6rem 1fr; gap: 1rem;
+    padding: 0.65rem 0; border-top: 1px solid var(--line);
+  }
+  .rows li:last-child { border-bottom: 1px solid var(--line); }
+  .k {
+    font-family: 'VT323', monospace;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .v {
+    color: var(--fg);
+    border-bottom: 1px dotted var(--accent);
+    transition: color 0.2s ease;
+  }
+  .v:hover { color: var(--accent); }
+</style>

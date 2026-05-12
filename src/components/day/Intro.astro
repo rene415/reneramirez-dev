@@ -1,0 +1,39 @@
+---
+import CassetteToggle from '../CassetteToggle.svelte';
+---
+<section class="intro">
+  <h1 class="wordmark">
+    Rene<CassetteToggle client:load />
+  </h1>
+  <p class="lede">
+    I host, build, and maintain sites for small businesses out of a closet
+    in <span class="placeholder">[your city]</span>. This page is the index — work below, the rest is elsewhere.
+  </p>
+</section>
+
+<style>
+  .intro {
+    padding: 6rem 0 4rem;
+    border-bottom: 1px solid var(--line);
+  }
+  .wordmark {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-size: var(--wordmark, clamp(2.5rem, 9vw, 5.5rem));
+    font-weight: 600;
+    letter-spacing: -0.04em;
+    line-height: 1;
+  }
+  .lede {
+    margin-top: 1.75rem;
+    font-size: clamp(1rem, 2.4vw, 1.125rem);
+    color: var(--muted);
+    max-width: 52ch;
+    line-height: 1.65;
+  }
+  .placeholder {
+    color: var(--accent);
+    background: transparent;
+    padding: 0 0.15rem;
+    border-bottom: 1px dashed var(--accent);
+  }
+</style>
