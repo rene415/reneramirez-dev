@@ -1,0 +1,117 @@
+---
+// Phase 0 placeholder — reneramirez.dev under construction
+const buildTime = new Date().toISOString().slice(0, 16).replace('T', ' ');
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Rene Ramirez — under construction</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Rene Ramirez. Personal site, in progress." />
+    <meta name="robots" content="noindex" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:wght@400;600&family=Inter:wght@400;500&family=VT323&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #f4efe5;
+        --fg: #161311;
+        --muted: #5c554c;
+        --accent: #c4571e;
+      }
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body { background: var(--bg); color: var(--fg); height: 100%; font-family: 'Inter', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+      body { display: grid; grid-template-rows: 1fr auto; padding: 4rem 2rem 2rem; }
+
+      main { width: 100%; max-width: 720px; margin: 0 auto; align-self: center; }
+      .wordmark {
+        font-family: 'IBM Plex Serif', Georgia, serif;
+        font-size: clamp(2.5rem, 9vw, 5.5rem);
+        font-weight: 600;
+        letter-spacing: -0.04em;
+        line-height: 1;
+      }
+      .wordmark .dot { color: var(--accent); }
+      .lede {
+        margin-top: 1.75rem;
+        font-size: clamp(1rem, 2.4vw, 1.125rem);
+        color: var(--muted);
+        max-width: 48ch;
+        line-height: 1.6;
+      }
+      .meta {
+        margin-top: 3rem;
+        font-family: 'VT323', monospace;
+        font-size: 1.05rem;
+        color: var(--muted);
+        letter-spacing: 0.05em;
+      }
+      .meta div { line-height: 1.6; }
+      .meta b { color: var(--fg); font-weight: normal; }
+      .meta .cursor { animation: blink 1.5s steps(2) infinite; }
+
+      footer {
+        width: 100%; max-width: 720px;
+        margin: 0 auto;
+        display: flex; justify-content: space-between; align-items: flex-end;
+        font-family: 'VT323', monospace;
+        font-size: 0.95rem;
+        color: var(--muted);
+      }
+      .cassette-hint { display: flex; flex-direction: column; align-items: center; gap: 0.4rem; }
+      .cassette {
+        position: relative;
+        width: 64px; height: 42px;
+        border: 1.5px solid var(--fg);
+        border-radius: 4px;
+        opacity: 0.5;
+        transition: opacity 0.2s ease;
+        cursor: not-allowed;
+      }
+      .cassette:hover { opacity: 0.8; }
+      .cassette::before,
+      .cassette::after {
+        content: '';
+        position: absolute; top: 50%;
+        transform: translateY(-50%);
+        width: 13px; height: 13px;
+        border: 1.5px solid var(--fg);
+        border-radius: 50%;
+      }
+      .cassette::before { left: 12px; }
+      .cassette::after  { right: 12px; }
+      .cassette-label { font-size: 0.7rem; letter-spacing: 0.18em; }
+
+      @keyframes blink { 50% { opacity: 0.2; } }
+
+      @media (prefers-reduced-motion: reduce) {
+        .meta .cursor { animation: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1 class="wordmark">Rene<span class="dot">.</span></h1>
+      <p class="lede">
+        Putting the cassette together. This will be a place — projects, music,
+        photography, motorcycles, and the rooms behind the rooms. Check back soon.
+      </p>
+      <div class="meta">
+        <div>STATUS&nbsp;&nbsp;<b>UNDER CONSTRUCTION</b> <span class="cursor">_</span></div>
+        <div>BUILD&nbsp;&nbsp;&nbsp;<b>{buildTime} UTC</b></div>
+        <div>PHASE&nbsp;&nbsp;&nbsp;<b>0 / FOUNDATION</b></div>
+      </div>
+    </main>
+    <footer>
+      <div>reneramirez.dev — v0.0.1</div>
+      <div class="cassette-hint">
+        <div class="cassette" title="Flip the tape — coming in Phase 1"></div>
+        <div class="cassette-label">FLIP&nbsp;SOON</div>
+      </div>
+    </footer>
+  </body>
+</html>
