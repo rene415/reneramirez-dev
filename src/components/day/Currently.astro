@@ -1,10 +1,11 @@
 ---
 const lines = [
-  ['Reading',  '[currently reading]'],
-  ['Building', '[current project]'],
-  ['Learning', '[something you’re learning]'],
-  ['Located',  '[your city]'],
+  { k: 'Reading',  v: 'Stephen King — 11/22/63',                  note: 'just picked up an e-reader' },
+  { k: 'Learning', v: 'AI · finance · whatever else won\'t stop',  note: null },
+  { k: 'Building', v: 'this site. the rest is a moving target',    note: null },
+  { k: 'Located',  v: 'SF Bay Area',                                note: null },
 ];
+const aside = 'lost in the amount of knowledge I tie myself in.';
 ---
 <section class="currently">
   <header class="section-head">
@@ -12,13 +13,17 @@ const lines = [
     <h2 class="section-title">Currently</h2>
   </header>
   <dl class="list">
-    {lines.map(([k, v]) => (
+    {lines.map(({ k, v, note }) => (
       <div class="row">
         <dt>{k}</dt>
-        <dd class="placeholder-val">{v}</dd>
+        <dd>
+          <span class="val">{v}</span>
+          {note && <span class="note">— {note}</span>}
+        </dd>
       </div>
     ))}
   </dl>
+  <p class="aside">{aside}</p>
 </section>
 
 <style>
@@ -29,10 +34,10 @@ const lines = [
   }
   .section-title {
     font-family: 'IBM Plex Serif', Georgia, serif;
-    font-size: var(--section, clamp(1.5rem, 4vw, 2.5rem));
+    font-size: clamp(1.5rem, 4vw, 2.5rem);
     font-weight: 600; letter-spacing: -0.02em;
   }
-  .list { display: grid; gap: 1rem; max-width: 36rem; }
+  .list { display: grid; gap: 1rem; max-width: 44rem; }
   .row {
     display: grid; grid-template-columns: 8rem 1fr;
     gap: 1.5rem; padding: 0.85rem 0;
@@ -46,10 +51,14 @@ const lines = [
     letter-spacing: 0.1em;
     text-transform: uppercase;
   }
-  .placeholder-val {
-    color: var(--accent);
-    border-bottom: 1px dashed var(--accent);
-    display: inline-block;
-    padding-bottom: 1px;
+  .val { color: var(--fg); }
+  .note { color: var(--muted); font-style: italic; margin-left: 0.25rem; }
+
+  .aside {
+    margin-top: 2rem;
+    color: var(--muted);
+    font-style: italic;
+    max-width: 44rem;
+    font-size: 0.95rem;
   }
 </style>

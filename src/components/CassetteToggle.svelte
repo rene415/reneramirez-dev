@@ -1,90 +1,148 @@
 <script>
   import { onMount } from 'svelte';
+  import CassetteSVG from './CassetteSVG.svelte';
 
   // ── state ──────────────────────────────────────────────────
-  let mode = 'day';           // 'day' | 'night'
-  let flipping = false;       // mid-transition
-  let hinted = false;         // dot has started its subtle pulse
-  let soundOn = false;        // user has opted into sound
+  let mode = 'day';
+  let flipping = false;
+  let hinted = false;
+  let soundOn = false;
+  let ambientHandle = null;       // running tape whirr loop ref
 
-  let audioCtx;               // lazy-init WebAudio
+  let audioCtx;
 
-  // ── audio (synthesized, no asset files) ────────────────────
+  // ── audio plumbing ─────────────────────────────────────────
   function getCtx() {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     return audioCtx;
   }
 
-  function click() {
+  // Cassette-into-player CHUNK click (two close clicks for the "lock" effect)
+  function insertClick() {
     if (!soundOn) return;
     const ctx = getCtx();
-    const t = ctx.currentTime;
-    // sharp short click — like a cassette button
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'square';
-    osc.frequency.setValueAtTime(180, t);
-    gain.gain.setValueAtTime(0.0001, t);
-    gain.gain.exponentialRampToValueAtTime(0.18, t + 0.005);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
-    osc.connect(gain).connect(ctx.destination);
-    osc.start(t);
-    osc.stop(t + 0.07);
+    function oneClick(delay, freq = 220, dur = 0.04, peak = 0.22) {
+      const t = ctx.currentTime + delay;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, t);
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(peak, t + 0.005);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t); osc.stop(t + dur + 0.02);
+    }
+    oneClick(0,    180, 0.05, 0.25);
+    oneClick(0.07, 130, 0.07, 0.20);
   }
 
-  function whirr() {
+  // tape spin-up "whirr" — short, plays once at the moment of transition
+  function spinUpWhirr() {
     if (!soundOn) return;
     const ctx = getCtx();
     const t = ctx.currentTime;
-    // a brief noise burst, low-passed — tape spin-up
-    const bufferSize = ctx.sampleRate * 0.6;
-    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * 0.5;
-    const noise = ctx.createBufferSource();
-    noise.buffer = buffer;
+    const buf = ctx.createBuffer(1, ctx.sampleRate * 0.5, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * 0.6;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(400, t);
-    filter.frequency.exponentialRampToValueAtTime(80, t + 0.6);
-    const gain = ctx.createGain();
-    gain.gain.setValueAtTime(0.0001, t);
-    gain.gain.exponentialRampToValueAtTime(0.08, t + 0.05);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
-    noise.connect(filter).connect(gain).connect(ctx.destination);
-    noise.start(t);
-    noise.stop(t + 0.6);
+    filter.frequency.setValueAtTime(500, t);
+    filter.frequency.exponentialRampToValueAtTime(120, t + 0.4);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.09, t + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+    src.connect(filter).connect(g).connect(ctx.destination);
+    src.start(t); src.stop(t + 0.5);
+  }
+
+  // continuous low tape-rolling ambience while in Night mode
+  function startAmbient() {
+    if (!soundOn || ambientHandle) return;
+    const ctx = getCtx();
+    const t = ctx.currentTime;
+    // brown-ish noise buffer
+    const bufSize = ctx.sampleRate * 2;
+    const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < bufSize; i++) {
+      const w = Math.random() * 2 - 1;
+      d[i] = (last + 0.02 * w) / 1.02;
+      last = d[i];
+      d[i] *= 3.5;
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 220;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.025, t + 0.8);
+    src.connect(filter).connect(g).connect(ctx.destination);
+    src.start();
+    ambientHandle = { src, g };
+  }
+
+  function stopAmbient() {
+    if (!ambientHandle) return;
+    const ctx = getCtx();
+    const t = ctx.currentTime;
+    const { src, g } = ambientHandle;
+    g.gain.cancelScheduledValues(t);
+    g.gain.setValueAtTime(g.gain.value, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+    setTimeout(() => { try { src.stop(); } catch (_) {} }, 600);
+    ambientHandle = null;
   }
 
   // ── flip ───────────────────────────────────────────────────
   async function flip() {
     if (flipping) return;
     flipping = true;
-    click();
+    insertClick();
+    setTimeout(spinUpWhirr, 200);
 
-    // tiny pause, then whirr starts
-    setTimeout(whirr, 120);
+    // wait for cassette to ride the rotateY
+    await new Promise((r) => setTimeout(r, 800));
 
-    // wait for the transition CSS to complete, then swap mode
-    await new Promise((r) => setTimeout(r, 700));
     mode = mode === 'day' ? 'night' : 'day';
     document.body.dataset.mode = mode;
     document.documentElement.dataset.mode = mode;
+
+    if (mode === 'night') startAmbient(); else stopAmbient();
 
     await new Promise((r) => setTimeout(r, 700));
     flipping = false;
   }
 
-  // ── dot pulse (subtle invitation after a few seconds) ──────
+  // ── dot pulse hint ─────────────────────────────────────────
   onMount(() => {
-    const timer = setTimeout(() => { hinted = true; }, 4500);
-    return () => clearTimeout(timer);
+    const t = setTimeout(() => { hinted = true; }, 4500);
+
+    const handler = (e) => {
+      soundOn = !!(e && e.detail);
+      // if already in night and sound just got enabled, start ambient
+      if (soundOn && mode === 'night' && !ambientHandle) startAmbient();
+      if (!soundOn && ambientHandle) stopAmbient();
+    };
+    window.addEventListener('rr-sound', handler);
+    // initial sync from SoundToggle
+    soundOn = !!window.__rrSoundOn;
+
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener('rr-sound', handler);
+      stopAmbient();
+    };
   });
 
-  // ── expose for parent (sound toggle) ───────────────────────
-  export function setSound(v) { soundOn = v; }
-
-  // ── keyboard: ESC flips back to day ────────────────────────
+  // ESC to flip back from Night
   function onKey(e) {
     if (e.key === 'Escape' && mode === 'night' && !flipping) flip();
   }
@@ -92,7 +150,7 @@
 
 <svelte:window on:keydown={onKey} />
 
-<!-- The trigger: the period after "Rene" -->
+<!-- the trigger: the period after "Rene" -->
 <button
   class="dot"
   class:hinted
@@ -101,29 +159,29 @@
   title="."
 >.</button>
 
-<!-- Full-screen flip overlay (only visible during transition) -->
+<!-- flip overlay -->
 <div class="flip-overlay" class:active={flipping} aria-hidden="true">
-  <div class="cassette">
-    <div class="cassette-body" class:flipping>
-      <div class="reel reel-l"><span class="hub"></span></div>
-      <div class="reel reel-r"><span class="hub"></span></div>
-      <div class="label">
-        <span class="side side-a">A · day</span>
-        <span class="side side-b">B · night</span>
-      </div>
-      <div class="tape-window"></div>
+  <div class="stage">
+    <div class="cassette-3d" class:flipping>
+      <CassetteSVG spinning={flipping} side={mode === 'day' ? 'A' : 'B'} />
+    </div>
+    <div class="caption">
+      {#if mode === 'day'}
+        <span>side A · day</span> <span class="arr">→</span> <span class="dim">side B · night</span>
+      {:else}
+        <span>side B · night</span> <span class="arr">→</span> <span class="dim">side A · day</span>
+      {/if}
     </div>
   </div>
 </div>
 
 <style>
-  /* the dot — sits inline in the wordmark */
+  /* the dot */
   .dot {
     display: inline-block;
     color: var(--accent);
     font: inherit;
-    background: none;
-    border: none;
+    background: none; border: none;
     padding: 0 0.05em;
     margin: 0;
     cursor: pointer;
@@ -132,16 +190,15 @@
     line-height: 1;
   }
   .dot:focus-visible { outline: 2px dashed var(--accent); outline-offset: 4px; border-radius: 2px; }
-  .dot:hover         { transform: scale(1.25); filter: drop-shadow(0 0 6px var(--accent)); }
-  .dot.hinted        { animation: pulseSoft 2.6s ease-in-out infinite; }
-  .dot.hinted:hover  { animation: none; }
-
+  .dot:hover { transform: scale(1.25); filter: drop-shadow(0 0 8px var(--accent)); }
+  .dot.hinted { animation: pulseSoft 2.6s ease-in-out infinite; }
+  .dot.hinted:hover { animation: none; }
   @keyframes pulseSoft {
-    0%, 100% { transform: scale(1);    opacity: 1;   }
+    0%, 100% { transform: scale(1);    opacity: 1;    }
     50%      { transform: scale(1.18); opacity: 0.75; }
   }
 
-  /* ── flip overlay ──────────────────────────────────────── */
+  /* overlay */
   .flip-overlay {
     position: fixed; inset: 0;
     z-index: 9999;
@@ -153,70 +210,28 @@
   }
   .flip-overlay.active { opacity: 1; pointer-events: auto; }
 
-  /* ── cassette art ──────────────────────────────────────── */
-  .cassette {
-    width: min(80vw, 340px);
+  .stage {
+    display: flex; flex-direction: column; align-items: center; gap: 1.25rem;
+    perspective: 1400px;
+  }
+
+  /* the 3D-ish flip wrapper */
+  .cassette-3d {
+    width: min(82vw, 420px);
     aspect-ratio: 5 / 3;
-    perspective: 1200px;
-  }
-  .cassette-body {
-    position: relative;
-    width: 100%; height: 100%;
-    background: linear-gradient(135deg, #2a2a2a, #1a1a1a);
-    border: 2px solid var(--accent);
-    border-radius: 6px;
     transform-style: preserve-3d;
-    transition: transform 1100ms cubic-bezier(.7,.05,.2,1);
-    box-shadow: 0 12px 32px rgba(0,0,0,.45);
+    transition: transform 1100ms cubic-bezier(0.68, 0.04, 0.22, 1.0);
   }
-  .cassette-body.flipping { transform: rotateY(540deg); }
+  .cassette-3d.flipping {
+    transform: rotateY(540deg) scale(1.03);
+  }
 
-  .reel {
-    position: absolute; top: 50%;
-    width: 22%; aspect-ratio: 1;
-    border-radius: 50%;
-    background: radial-gradient(circle, #444 0 35%, #1a1a1a 36% 60%, #333 61%);
-    transform: translateY(-50%);
-    animation: spin 1.6s linear infinite paused;
-  }
-  .reel-l { left: 12%; }
-  .reel-r { right: 12%; }
-  .cassette-body.flipping .reel { animation-play-state: running; }
-  .hub {
-    position: absolute; inset: 30%;
-    border-radius: 50%;
-    background: #0a0a0a;
-    box-shadow: inset 0 0 0 1px #555;
-  }
-  @keyframes spin { to { transform: translateY(-50%) rotate(360deg); } }
-
-  .label {
-    position: absolute;
-    left: 50%; top: 18%;
-    transform: translateX(-50%);
-    width: 56%; height: 22%;
-    background: var(--bg);
-    border: 1px solid var(--accent);
-    border-radius: 3px;
-    display: grid; place-items: center;
+  .caption {
     font-family: 'VT323', monospace;
-    font-size: 1rem;
-    color: var(--fg);
-    letter-spacing: 0.15em;
-    overflow: hidden;
+    font-size: 0.95rem;
+    color: var(--muted);
+    letter-spacing: 0.18em;
   }
-  .side { position: absolute; transition: opacity 400ms ease, transform 400ms ease; }
-  .side-a { opacity: 1; transform: translateY(0); }
-  .side-b { opacity: 0; transform: translateY(120%); }
-  :global([data-mode='night']) .side-a { opacity: 0; transform: translateY(-120%); }
-  :global([data-mode='night']) .side-b { opacity: 1; transform: translateY(0); }
-
-  .tape-window {
-    position: absolute;
-    left: 8%; right: 8%; bottom: 14%;
-    height: 22%;
-    background: linear-gradient(to bottom, #0a0a0a 0%, #1a1a1a 50%, #0a0a0a 100%);
-    border-radius: 2px;
-    box-shadow: inset 0 0 0 1px #333;
-  }
+  .caption .arr { color: var(--accent); margin: 0 0.5rem; }
+  .caption .dim { color: var(--fg); opacity: 0.55; }
 </style>

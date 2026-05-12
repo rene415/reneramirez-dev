@@ -1,18 +1,27 @@
 ---
-const projects = [
+type Project = {
+  name: string;
+  role: string;
+  year: string;
+  url: string;
+  blurb: string;
+  placeholder?: boolean;
+};
+
+const projects: Project[] = [
   {
     name: 'El Ruben’s Tamales',
     role: 'Hosting + dev',
     year: '2023 — ongoing',
     url: 'https://elrubenstamales.com',
-    blurb: 'Family business. Custom WordPress on a Dockerized stack I run from this same DMZ host.',
+    blurb: 'Family business. Custom WordPress on a Dockerized stack I run from a closet in the Bay.',
   },
   {
     name: '[Project two]',
     role: '[Your role]',
     year: '[Year]',
     url: '#',
-    blurb: '[A line about the project. What it does, who it’s for, what was interesting about building it.]',
+    blurb: 'More client and side projects coming — drop them in src/data when you’re ready.',
     placeholder: true,
   },
   {
@@ -20,7 +29,7 @@ const projects = [
     role: '[Your role]',
     year: '[Year]',
     url: '#',
-    blurb: '[Add 2–6 more of your hosted/client sites here — I’ll wire them up from src/data/projects.ts later.]',
+    blurb: 'Hosted sites, infrastructure work, anything else you want on the A-side.',
     placeholder: true,
   },
 ];
@@ -51,14 +60,12 @@ const projects = [
   .work { padding: 5rem 0; border-bottom: 1px solid var(--line); }
   .section-head { display: flex; align-items: baseline; gap: 1rem; margin-bottom: 2.5rem; }
   .section-num {
-    font-family: 'VT323', monospace;
-    font-size: 1rem; color: var(--muted); letter-spacing: 0.1em;
+    font-family: 'VT323', monospace; font-size: 1rem; color: var(--muted); letter-spacing: 0.1em;
   }
   .section-title {
     font-family: 'IBM Plex Serif', Georgia, serif;
-    font-size: var(--section, clamp(1.5rem, 4vw, 2.5rem));
-    font-weight: 600;
-    letter-spacing: -0.02em;
+    font-size: clamp(1.5rem, 4vw, 2.5rem);
+    font-weight: 600; letter-spacing: -0.02em;
   }
   .grid { list-style: none; display: grid; gap: 1.5rem; }
   @media (min-width: 640px) {

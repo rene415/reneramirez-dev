@@ -5,10 +5,21 @@ import CassetteToggle from '../CassetteToggle.svelte';
   <h1 class="wordmark">
     Rene<CassetteToggle client:load />
   </h1>
-  <p class="lede">
-    I host, build, and maintain sites for small businesses out of a closet
-    in <span class="placeholder">[your city]</span>. This page is the index — work below, the rest is elsewhere.
-  </p>
+  <div class="bio">
+    <p>
+      My name is Rene Ramirez. I love to tinker with technology &mdash; born in
+      <span class="hl">'96</span>, the same year Nintendo dropped the N64 in Japan
+      with the first analog stick anyone had ever felt. I was born in Mexico, grew up
+      in the <span class="hl">SF Bay Area</span>, and live out here still.
+    </p>
+    <p>
+      After dropping out of college I learned to program at
+      <span class="hl">42</span> &mdash; a school where you teach yourself and
+      amazing people from every corner of the world teach you back. From there I
+      started my own IT company, got pulled into the corporate world, learned AI,
+      and now we're here making amazing stuff with it.
+    </p>
+  </div>
 </section>
 
 <style>
@@ -18,22 +29,24 @@ import CassetteToggle from '../CassetteToggle.svelte';
   }
   .wordmark {
     font-family: 'IBM Plex Serif', Georgia, serif;
-    font-size: var(--wordmark, clamp(2.5rem, 9vw, 5.5rem));
+    font-size: clamp(2.5rem, 9vw, 5.5rem);
     font-weight: 600;
     letter-spacing: -0.04em;
     line-height: 1;
   }
-  .lede {
+  .bio {
     margin-top: 1.75rem;
+    max-width: 56ch;
+    display: grid; gap: 1.1rem;
+  }
+  .bio p {
     font-size: clamp(1rem, 2.4vw, 1.125rem);
     color: var(--muted);
-    max-width: 52ch;
-    line-height: 1.65;
+    line-height: 1.7;
   }
-  .placeholder {
-    color: var(--accent);
-    background: transparent;
-    padding: 0 0.15rem;
-    border-bottom: 1px dashed var(--accent);
+  .hl {
+    color: var(--fg);
+    border-bottom: 1px dotted var(--accent);
+    font-weight: 500;
   }
 </style>
