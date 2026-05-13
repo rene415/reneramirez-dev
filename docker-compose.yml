@@ -7,6 +7,11 @@ services:
     ports:
       - "32779:80"
     restart: unless-stopped
+    volumes:
+      # Music files are NOT in git (see .gitignore). The canonical host
+      # location is /home/admin_00/projects/reneramirez-dev/public/music
+      # — drop new tracks there and they're served at /music/<filename>.
+      - /home/admin_00/projects/reneramirez-dev/public/music:/srv/music:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
       interval: 30s

@@ -24,3 +24,12 @@ Thumbs.db
 # logs
 logs
 *.log
+
+# Music files are bind-mounted at runtime (see docker-compose.yml).
+# Keeps git lean — 100MB+ of audio doesn't belong in version history.
+# To remove: convert to MP3/Opus, then we can move to Cloudflare R2.
+public/music/*.wav
+public/music/*.mp3
+public/music/*.ogg
+public/music/*.flac
+public/music/*.m4a

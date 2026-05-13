@@ -72,7 +72,10 @@ export const channels: Channel[] = [
       { k: 'STILL ON IT?', v: 'yes' },
     ],
     photos: [
-      // Drop files into public/photos/garage/ then add entries here.
+      { src: '/photos/garage/NKZ_7627.jpg', alt: 'Street Bob, three-quarter view' },
+      { src: '/photos/garage/NKZ_7630.jpg', alt: 'Street Bob, alt angle' },
+      { src: '/photos/garage/NKZ_7636.jpg', alt: 'Street Bob, detail' },
+      { src: '/photos/garage/NKZ_7643.jpg', alt: 'Street Bob, in the wild' },
     ],
   },
   {

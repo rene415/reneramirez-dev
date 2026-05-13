@@ -38,6 +38,11 @@ html, body {
 
 body { min-height: 100vh; overflow-x: hidden; }
 
+/* Night mode locks the scroll — channel switcher is in charge.
+   Doing this in CSS (not JS) so flipping back to Day always cleans up,
+   even if the Svelte component is hidden rather than unmounted. */
+[data-mode='night'] body { overflow: hidden; }
+
 ::selection { background: var(--accent); color: var(--bg); }
 
 a { color: inherit; text-decoration: none; }
