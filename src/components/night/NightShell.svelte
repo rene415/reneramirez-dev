@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { channels } from '../../data/channels';
   import { channelTracks } from '../../data/music';
+  import BrowserFrame from './BrowserFrame.svelte';
 
   // ── state ──────────────────────────────────────────────────
   let index = 0;
@@ -580,7 +581,12 @@
             {/each}
           </ul>
         {/if}
-        {#if current.photos && current.photos.length}
+        {#if current.id === 'lenses'}
+          <!-- Lenses pulls the live gallery from madm3x.com inside a
+               vintage browser-window frame. Update src in BrowserFrame
+               if the host changes. -->
+          <BrowserFrame src="https://madm3x.com" displayUrl="madm3x.com" />
+        {:else if current.photos && current.photos.length}
           <div class="photos">
             {#each current.photos as p}
               <figure>
@@ -588,11 +594,6 @@
               </figure>
             {/each}
           </div>
-        {:else if current.id === 'lenses'}
-          <p class="photo-empty">
-            [drop photos in <code>public/photos/lenses/</code> and reference them in
-            <code>src/data/channels.ts</code>]
-          </p>
         {/if}
       </article>
     {/key}
