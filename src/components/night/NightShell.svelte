@@ -22,7 +22,11 @@
   let isPlaying = false;
   let soundOn = true;
   let audioCtx, audioEl, sourceNode, filterNode, gainNode, analyser;
-  const GLITCH_VARIANTS = ['vhs', 'rgb', 'corrupt', 'pinch', 'tear'];
+  // pinch/tear are one-shot animations — only good for the climax.
+  // vhs/rgb/corrupt loop forever — used during the buildup so the
+  // intensity is consistent until the drop fires.
+  const BUILDUP_VARIANTS    = ['vhs', 'rgb', 'corrupt'];
+  const TRANSITION_VARIANTS = ['vhs', 'rgb', 'corrupt', 'pinch', 'tear'];
 
   // visualizer / particles canvases
   let visCanvas, partCanvas;
@@ -174,12 +178,60 @@
     setTimeout(() => { framePulse = false; }, 400);
   }
 
+  // ── camera shutter (synthesized SLR shutter — two clicks ~130ms apart) ──
+  function cameraShutter() {
+    if (!soundOn) return;
+    setupAudio();
+    const ctx = audioCtx;
+    const t = ctx.currentTime;
+    function click(start, freq, dur, peak) {
+      const buf = ctx.createBuffer(1, Math.max(1, Math.floor(ctx.sampleRate * dur)), ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * 0.55;
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      const f = ctx.createBiquadFilter();
+      f.type = 'bandpass';
+      f.frequency.value = freq;
+      f.Q.value = 2.5;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, start);
+      g.gain.exponentialRampToValueAtTime(peak, start + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+      src.connect(f).connect(g).connect(ctx.destination);
+      src.start(start); src.stop(start + dur + 0.01);
+    }
+    click(t,         2300, 0.04, 0.34);   // mirror up / shutter open
+    click(t + 0.13,  1500, 0.05, 0.30);   // shutter close / mirror down
+  }
+
+  // ── on entering a channel: per-channel side effects ───────────
+  function onChannelEnter(channelId) {
+    // Visualizer: ONLY on Decks (the DJ channel). Manage the RAF so we
+    // don't waste CPU drawing invisible bars elsewhere.
+    if (channelId === 'decks') {
+      if (!visRaf) visRaf = requestAnimationFrame(drawVisualizer);
+    } else if (visRaf) {
+      cancelAnimationFrame(visRaf);
+      visRaf = 0;
+      if (visCanvas) {
+        const c = visCanvas.getContext('2d');
+        c && c.clearRect(0, 0, visCanvas.width, visCanvas.height);
+      }
+    }
+    // Photography: SLR shutter on arrival.
+    if (channelId === 'lenses') cameraShutter();
+  }
+
   // ── channel transition (shared) ────────────────────────────
+  // The caller is responsible for setting `glitchVariant`. For a held
+  // buildup the variant was already chosen at hold-start (so the visual
+  // ramps with the same effect from 0 → 1). For direct jumps goChannel
+  // picks fresh from the full variant pool (including one-shot ones).
   async function transitionChannel(targetIdx, isDrop) {
     if (transitioning) return;
     transitioning = true;
     try {
-      glitchVariant = GLITCH_VARIANTS[Math.floor(Math.random() * GLITCH_VARIANTS.length)];
       glitchSound();
       holdFilterUp(isDrop);
       if (isDrop) flashFrame();
@@ -188,6 +240,7 @@
         index = targetIdx;
         lastPlayedIdx = -1;
         glitchTitle(channels[targetIdx].name);
+        onChannelEnter(channels[targetIdx].id);
       }
       playRandomFromChannel(targetIdx);
       await new Promise((r) => setTimeout(r, 480));
@@ -197,12 +250,16 @@
   }
   async function goChannel(target) {
     if (target === index) return;
+    // Direct jump — fresh variant from full pool (any animation OK since
+    // there's no buildup to keep consistent).
+    glitchVariant = TRANSITION_VARIANTS[Math.floor(Math.random() * TRANSITION_VARIANTS.length)];
     return transitionChannel(target, false);
   }
   function nextChannel() { goChannel((index + 1) % channels.length); }
   function prevChannel() { goChannel((index - 1 + channels.length) % channels.length); }
   async function fireHoldDrop() {
     const target = (index + 1) % channels.length;
+    // Keep the variant the buildup was using — same effect intensifies → drops.
     return transitionChannel(target, true);
   }
 
@@ -221,6 +278,9 @@
   }
   function startHold() {
     if (holding || transitioning) return;
+    // Pick the variant NOW so the glitch overlay can ramp up consistently
+    // through the hold buildup with the same animation.
+    glitchVariant = BUILDUP_VARIANTS[Math.floor(Math.random() * BUILDUP_VARIANTS.length)];
     holding = true;
     holdStartedAt = performance.now();
     if (audioCtx) holdFilterDown();
@@ -404,10 +464,11 @@
       playRandomFromChannel();
     }
 
-    // Kick off canvas RAFs + ambient glitch
+    // Kick off canvas RAFs. Particles always run (subtle ambient).
+    // Visualizer only runs on Decks — onChannelEnter handles that.
     setupParticles();
-    visRaf  = requestAnimationFrame(drawVisualizer);
     partRaf = requestAnimationFrame(drawParticles);
+    onChannelEnter(current?.id);
     glitchTitle(current?.name || '');
     scheduleAmbientGlitch();
 
@@ -519,10 +580,24 @@
     {/key}
   </div>
 
-  <!-- audio visualizer (above particles, below content) -->
-  <canvas bind:this={visCanvas} class="visualizer" aria-hidden="true"></canvas>
+  <!-- audio visualizer — only visible on the Decks channel -->
+  <canvas
+    bind:this={visCanvas}
+    class="visualizer"
+    class:visible={current?.id === 'decks'}
+    aria-hidden="true"
+  ></canvas>
 
-  <div class="glitch glitch-{glitchVariant}" class:active={transitioning} aria-hidden="true">
+  <!--
+    Glitch overlay — opacity ramps with holdProgress (buildup), stays at
+    1 during the actual transitioning state. CSS animations on g-l1/2/3
+    run continuously regardless; opacity reveals them.
+  -->
+  <div
+    class="glitch glitch-{glitchVariant}"
+    style:opacity={transitioning ? 1 : (holding ? Math.min(1, holdProgress * 1.15) : 0)}
+    aria-hidden="true"
+  >
     <div class="g-l1"></div>
     <div class="g-l2"></div>
     <div class="g-l3"></div>
@@ -589,17 +664,19 @@
     z-index: 1;
   }
 
-  /* ── audio visualizer canvas ───────────────────────────── */
+  /* ── audio visualizer canvas (only visible on Decks) ──── */
   .visualizer {
     position: absolute;
     left: 0; right: 0; bottom: 0;
     width: 100%; height: 200px;
     pointer-events: none;
     z-index: 1;
-    opacity: 0.55;
+    opacity: 0;
     mix-blend-mode: screen;
     filter: blur(0.4px);
+    transition: opacity 0.6s ease;
   }
+  .visualizer.visible { opacity: 0.55; }
 
   /* ── frame buildup (perimeter SVG, two halves) ─────────── */
   .frame-buildup {
@@ -802,13 +879,14 @@
   }
 
   /* ── glitch overlay variants ───────────────────────────── */
+  /* Opacity is driven inline by JS (holdProgress + transitioning) so the
+     buildup is smooth. The animated children (g-l1/2/3) run their CSS
+     keyframes continuously regardless of opacity. */
   .glitch {
     position: absolute; inset: 0;
     pointer-events: none; z-index: 4;
     opacity: 0;
-    transition: opacity 60ms linear;
   }
-  .glitch.active { opacity: 1; }
   .glitch > div { position: absolute; inset: 0; }
 
   .glitch-vhs .g-l1 {
