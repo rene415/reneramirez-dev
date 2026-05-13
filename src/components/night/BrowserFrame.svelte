@@ -17,10 +17,17 @@
       <span class="dot yellow"></span>
       <span class="dot green"></span>
     </div>
-    <div class="url" role="textbox" aria-readonly="true" aria-label="URL">
+    <a
+      class="url"
+      href={src}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={`Open ${displayUrl} in a new tab`}
+    >
       <span class="lock" aria-hidden="true">🔒</span>
       <span class="scheme">https://</span><span class="host">{displayUrl}</span>
-    </div>
+      <span class="open-hint" aria-hidden="true">↗</span>
+    </a>
     <button class="refresh" on:click={refresh} aria-label="Refresh" title="Refresh">↻</button>
   </div>
   <div class="screen">
@@ -86,14 +93,33 @@
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.78rem;
     color: var(--muted);
-    user-select: text;
+    text-decoration: none;
+    cursor: pointer;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+  }
+  .url:hover {
+    color: var(--fg);
+    background: rgba(255, 43, 138, 0.08);
+    border-color: var(--accent);
+  }
+  .url:hover .open-hint { opacity: 1; transform: translate(2px, -2px); }
+  .url:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
   }
   .url .lock   { font-size: 0.72rem; line-height: 1; }
   .url .scheme { color: var(--muted); }
   .url .host   { color: var(--fg); }
+  .url .open-hint {
+    margin-left: auto;
+    color: var(--accent);
+    font-size: 0.78rem;
+    opacity: 0;
+    transition: opacity 0.2s ease, transform 0.25s cubic-bezier(.2,.85,.4,1);
+  }
 
   .refresh {
     background: transparent;
