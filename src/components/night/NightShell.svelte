@@ -68,18 +68,24 @@
     return i;
   }
 
-  async function playRandomFromChannel() {
+  // FIRE-AND-FORGET. Never await audio operations from the transition
+  // functions — play() can take seconds to resolve on a slow first-load
+  // of a large MP3, and that was stalling the `transitioning` flag which
+  // blocks all keyboard input (including number keys).
+  function playRandomFromChannel() {
     if (!activeTracks.length) return;
     trackIdx = pickRandomIdx();
     lastPlayedIdx = trackIdx;
     setupAudio();
+    if (!audioEl) return;
     audioEl.src = currentTrack.src;
-    if (soundOn) {
-      if (audioCtx.state === 'suspended') {
-        try { await audioCtx.resume(); } catch (_) {}
-      }
-      try { await audioEl.play(); isPlaying = true; } catch (_) { isPlaying = false; }
+    if (!soundOn) return;
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume().catch(() => {});
     }
+    audioEl.play()
+      .then(() => { isPlaying = true; })
+      .catch(() => { isPlaying = false; });
   }
 
   function onTrackEnded() {
@@ -169,20 +175,23 @@
   }
 
   // ── channel change ─────────────────────────────────────────
+  // try/finally guarantees `transitioning` resets even if anything throws.
+  // playRandomFromChannel is fire-and-forget — no awaits on audio.
   async function goChannel(target) {
     if (transitioning || target === index) return;
     transitioning = true;
-    glitchVariant = GLITCH_VARIANTS[Math.floor(Math.random() * GLITCH_VARIANTS.length)];
-    glitchSound();
-    // light filter normalize — no big drop on direct channel jumps
-    holdFilterUp(false);
-    await new Promise((r) => setTimeout(r, 240));
-    index = target;
-    // load new channel's track pool, pick a random one
-    lastPlayedIdx = -1;
-    await playRandomFromChannel();
-    await new Promise((r) => setTimeout(r, 480));
-    transitioning = false;
+    try {
+      glitchVariant = GLITCH_VARIANTS[Math.floor(Math.random() * GLITCH_VARIANTS.length)];
+      glitchSound();
+      holdFilterUp(false);
+      await new Promise((r) => setTimeout(r, 240));
+      index = target;
+      lastPlayedIdx = -1;
+      playRandomFromChannel();
+      await new Promise((r) => setTimeout(r, 480));
+    } finally {
+      transitioning = false;
+    }
   }
   function nextChannel() { goChannel((index + 1) % channels.length); }
   function prevChannel() { goChannel((index - 1 + channels.length) % channels.length); }
@@ -190,14 +199,17 @@
   // ── hold-space → in-channel next song with drop ────────────
   async function fireHoldDrop() {
     transitioning = true;
-    glitchVariant = GLITCH_VARIANTS[Math.floor(Math.random() * GLITCH_VARIANTS.length)];
-    glitchSound();
-    holdFilterUp(true);          // the drop (filter snap + gain swell)
-    flashFrame();
-    await new Promise((r) => setTimeout(r, 240));
-    await playRandomFromChannel();
-    await new Promise((r) => setTimeout(r, 480));
-    transitioning = false;
+    try {
+      glitchVariant = GLITCH_VARIANTS[Math.floor(Math.random() * GLITCH_VARIANTS.length)];
+      glitchSound();
+      holdFilterUp(true);
+      flashFrame();
+      await new Promise((r) => setTimeout(r, 240));
+      playRandomFromChannel();
+      await new Promise((r) => setTimeout(r, 480));
+    } finally {
+      transitioning = false;
+    }
   }
 
   // ── hold loop ──────────────────────────────────────────────
