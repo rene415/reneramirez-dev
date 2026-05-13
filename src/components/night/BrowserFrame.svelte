@@ -35,16 +35,18 @@
     <div class="scanlines" aria-hidden="true"></div>
     <div class="glow-edge" aria-hidden="true"></div>
   </div>
-  <div class="caption">
-    <span>↗ open in new tab</span>
-    <a href={src} target="_blank" rel="noopener noreferrer">{displayUrl}</a>
-  </div>
+  <a class="go-to-site" href={src} target="_blank" rel="noopener noreferrer">
+    <span class="go-label">go to site</span>
+    <span class="go-host">{displayUrl}</span>
+    <span class="go-arrow" aria-hidden="true">↗</span>
+  </a>
 </div>
 
 <style>
   .bw {
+    /* Fill the (already-widened) parent — channel sets max-width to
+       min(80vw, 1280px) when on Lenses. */
     width: 100%;
-    max-width: 880px;
     margin-top: 1.5rem;
     border-radius: 10px;
     overflow: hidden;
@@ -115,7 +117,9 @@
   .screen {
     position: relative;
     width: 100%;
-    height: min(72vh, 680px);
+    /* Taller now that the frame is wider — feels more like an
+       actual browser window, less like a phone preview. */
+    height: min(75vh, 800px);
     background: #ffffff;
   }
   iframe {
@@ -143,28 +147,50 @@
     box-shadow: inset 0 0 36px rgba(255, 43, 138, 0.18);
   }
 
-  /* ── caption row beneath the frame ─────────────────────── */
-  .caption {
-    padding: 0.55rem 0.95rem;
-    background: linear-gradient(180deg, #0a0420 0%, #08041a 100%);
-    border-top: 1px solid rgba(255, 43, 138, 0.18);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.72rem;
+  /* ── go-to-site button beneath the frame ───────────────── */
+  /* Prominent CTA — the only outbound link for this channel.
+     Spans the full width, glows on hover, magenta accent. */
+  .go-to-site {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.9rem;
+    padding: 0.85rem 1.1rem;
+    background: linear-gradient(180deg, #1a0f33 0%, #0a0420 100%);
+    border-top: 1px solid rgba(255, 43, 138, 0.25);
     color: var(--muted);
-    letter-spacing: 0.08em;
-    display: flex; justify-content: space-between; align-items: center; gap: 0.5rem;
-  }
-  .caption a {
-    color: var(--fg);
     text-decoration: none;
-    border-bottom: 1px dotted var(--accent);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.92rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    transition: background 0.25s ease, color 0.2s ease, letter-spacing 0.3s ease;
   }
-  .caption a:hover { color: var(--accent); }
+  .go-to-site:hover {
+    color: var(--fg);
+    background: linear-gradient(180deg, #2a0a4a 0%, #160830 100%);
+    letter-spacing: 0.24em;
+  }
+  .go-to-site:hover .go-arrow { transform: translate(4px, -4px); }
+  .go-label { color: var(--accent); }
+  .go-host {
+    color: var(--fg);
+    border-bottom: 1px dotted var(--accent);
+    padding-bottom: 1px;
+    text-transform: none;
+    letter-spacing: 0.05em;
+  }
+  .go-arrow {
+    color: var(--accent);
+    font-size: 1.1rem;
+    line-height: 1;
+    transition: transform 0.25s cubic-bezier(.2,.85,.4,1);
+  }
 
   @media (max-width: 540px) {
-    .screen   { height: min(60vh, 460px); }
-    .url      { font-size: 0.7rem; padding: 0.2rem 0.55rem; }
+    .screen      { height: min(60vh, 460px); }
+    .url         { font-size: 0.7rem; padding: 0.2rem 0.55rem; }
     .url .scheme { display: none; }
-    .caption  { font-size: 0.65rem; }
+    .go-to-site  { font-size: 0.78rem; padding: 0.7rem 0.85rem; gap: 0.5rem; letter-spacing: 0.12em; }
   }
 </style>

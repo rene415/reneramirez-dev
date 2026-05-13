@@ -544,7 +544,7 @@
 
   <div class="stage" class:transitioning>
     {#key current.id}
-      <article class="channel" data-id={current.id}>
+      <article class="channel" class:wide={current.id === 'lenses'} data-id={current.id}>
         <h2 class="ch-title" style="text-shadow: 0 0 30px rgba(255,43,138,0.35);">
           {displayedTitle || current.name}
         </h2>
@@ -742,6 +742,10 @@
     opacity: 0.2; transform: translateY(8px); filter: blur(2px);
   }
   .channel { max-width: 760px; margin: 0 auto; }
+  /* Lenses widens the article so the embedded madm3x.com browser
+     frame can stretch to ~80% of the viewport. Other channels keep
+     the comfortable reading width. */
+  .channel.wide { max-width: min(80vw, 1280px); }
   /* each direct child fades up with a stagger — #key re-creates the
      <article> on channel change so animations re-fire from zero */
   .channel > * {

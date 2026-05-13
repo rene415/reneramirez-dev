@@ -46,16 +46,12 @@ export const channels: Channel[] = [
     number: 'CH. 02',
     tagline: "shot on whatever's nearby",
     body:
-      'people in motion, parking lots at 2am, the moments that won\'t shut up. more on madm3x.com.',
+      "people in motion, parking lots at 2am, the moments that won't shut up.",
     accent: 'cyan',
-    links: [
-      { label: 'Instagram',         url: 'https://www.instagram.com/_madm3x/', handle: '_madm3x' },
-      { label: 'madm3x.com',         url: 'https://madm3x.com',                  handle: 'archive' },
-    ],
-    photos: [
-      // Drop files into public/photos/lenses/ then add entries here, e.g.:
-      // { src: '/photos/lenses/sample-1.jpg', alt: 'parking lot, 2am' },
-    ],
+    // Lenses doesn't render the standard link tiles — the embedded
+    // madm3x.com browser frame is the link. See NightShell.svelte.
+    links: [],
+    photos: [],
   },
   {
     id: 'garage',
