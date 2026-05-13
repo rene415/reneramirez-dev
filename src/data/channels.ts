@@ -72,10 +72,10 @@ export const channels: Channel[] = [
       { k: 'STILL ON IT?', v: 'yes' },
     ],
     photos: [
-      { src: '/photos/garage/NKZ_7627.jpg', alt: 'Street Bob, three-quarter view' },
-      { src: '/photos/garage/NKZ_7630.jpg', alt: 'Street Bob, alt angle' },
-      { src: '/photos/garage/NKZ_7636.jpg', alt: 'Street Bob, detail' },
-      { src: '/photos/garage/NKZ_7643.jpg', alt: 'Street Bob, in the wild' },
+      { src: '/photos/garage/nkz-7627.webp', alt: 'Street Bob, three-quarter view' },
+      { src: '/photos/garage/nkz-7630.webp', alt: 'Street Bob, alt angle' },
+      { src: '/photos/garage/nkz-7636.webp', alt: 'Street Bob, detail' },
+      { src: '/photos/garage/nkz-7643.webp', alt: 'Street Bob, in the wild' },
     ],
   },
   {

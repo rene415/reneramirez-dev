@@ -9,7 +9,12 @@
   let holdProgress = 0;
   let transitioning = false;
   let glitchVariant = 'vhs';
-  const HOLD_MS = 800;
+  // 5-second buildup. Hold SPACE → filter sweeps from 20kHz → 260Hz over
+  // this duration (the "tension"), then at completion the channel changes
+  // and filter snaps back to 20kHz with a gain swell (the "drop").
+  // For quick channel changes without the buildup, use number keys 1–5
+  // or the arrow keys.
+  const HOLD_MS = 5000;
   let holdStartedAt = 0;
   let rafId = 0;
 
@@ -38,8 +43,11 @@
     if (audioCtx) return;
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     audioEl = new Audio();
-    audioEl.preload = 'none';
+    // 'auto' so the first track starts downloading the moment sound is
+    // enabled — by the time the cassette flip finishes, audio is ready.
+    audioEl.preload = 'auto';
     audioEl.crossOrigin = 'anonymous';
+    audioEl.src = currentTrack.src;     // start fetching immediately
     audioEl.addEventListener('ended', nextTrack);
     sourceNode = audioCtx.createMediaElementSource(audioEl);
     filterNode = audioCtx.createBiquadFilter();
@@ -86,15 +94,30 @@
   function holdFilterUp(dropMode) {
     if (!filterNode) return;
     const t = audioCtx.currentTime;
+    const currentFreq = filterNode.frequency.value;
+    const currentGain = gainNode.gain.value;
     filterNode.frequency.cancelScheduledValues(t);
-    filterNode.frequency.setValueAtTime(filterNode.frequency.value, t);
+    filterNode.frequency.setValueAtTime(currentFreq, t);
     gainNode.gain.cancelScheduledValues(t);
-    gainNode.gain.setValueAtTime(gainNode.gain.value, t);
-    if (dropMode) {
-      // the DROP — snap filter open + brief gain swell
-      filterNode.frequency.exponentialRampToValueAtTime(20000, t + 0.06);
-      gainNode.gain.exponentialRampToValueAtTime(0.95, t + 0.08);
-      gainNode.gain.exponentialRampToValueAtTime(0.55, t + 0.7);
+    gainNode.gain.setValueAtTime(currentGain, t);
+
+    // Only stage a real "drop" if there was an actual buildup — i.e.
+    // user held space and the filter is currently muffled. If they
+    // tapped 1–5 or clicked a channel dot without holding, just keep
+    // playing smoothly (no surprise volume burst — that was making
+    // channel changes feel like a new song starting).
+    const wasBuilding = currentFreq < 5000 || currentGain < 0.5;
+
+    if (dropMode && wasBuilding) {
+      // THE DROP — filter sweeps open over ~150ms (smooth, not a slam),
+      // gain briefly swells then settles
+      filterNode.frequency.exponentialRampToValueAtTime(20000, t + 0.15);
+      gainNode.gain.exponentialRampToValueAtTime(0.78, t + 0.1);
+      gainNode.gain.exponentialRampToValueAtTime(0.55, t + 0.8);
+    } else if (dropMode) {
+      // channel change without buildup — gentle normalize, no drop
+      filterNode.frequency.linearRampToValueAtTime(20000, t + 0.1);
+      gainNode.gain.linearRampToValueAtTime(0.55, t + 0.1);
     } else {
       // hold cancelled — graceful return
       filterNode.frequency.exponentialRampToValueAtTime(20000, t + 0.5);
@@ -202,8 +225,14 @@
   // ── mount / mode-sync ──────────────────────────────────────
   onMount(() => {
     const onSound = (e) => {
+      const wasOff = !soundOn;
       soundOn = !!(e && e.detail);
-      if (!soundOn) pause();
+      if (!soundOn) { pause(); return; }
+      // Eager setup so AudioContext is ready before user enters Night.
+      // (User just clicked the sound toggle = valid gesture for new AudioContext.)
+      if (!audioCtx) setupAudio();
+      // If already in Night when sound is enabled, start immediately
+      if (wasOff && document.body.dataset.mode === 'night') play();
     };
     soundOn = !!window.__rrSoundOn;
     window.addEventListener('rr-sound', onSound);
@@ -254,21 +283,10 @@
   <div class="scanlines" aria-hidden="true"></div>
   <div class="vignette"  aria-hidden="true"></div>
 
-  <!-- hud top — channel index + now playing -->
+  <!-- hud top — channel index only (now-playing moved to bottom HUD) -->
   <div class="hud-top">
-    <div class="left">
-      <span class="ch-tag" style="color: {accentColor}">{current.number}</span>
-      <span class="ch-name">{current.name}</span>
-    </div>
-    <div class="now-playing" class:playing={isPlaying}>
-      <button class="np-btn" on:click={prevTrack} aria-label="previous">‹</button>
-      <button class="np-btn play" on:click={togglePlay} aria-label={isPlaying ? 'pause' : 'play'}>
-        {isPlaying ? '❚❚' : '▶'}
-      </button>
-      <button class="np-btn" on:click={nextTrack} aria-label="next">›</button>
-      <span class="np-title">{currentTrack.title}</span>
-      <span class="np-date">{currentTrack.date}</span>
-    </div>
+    <span class="ch-tag" style="color: {accentColor}">{current.number}</span>
+    <span class="ch-name">{current.name}</span>
   </div>
 
   <!-- channel content -->
@@ -337,8 +355,17 @@
     <div class="g-static"></div>
   </div>
 
-  <!-- bottom HUD -->
+  <!-- bottom HUD: media player + channels + keymap hint -->
   <div class="hud-bottom">
+    <div class="now-playing" class:playing={isPlaying}>
+      <button class="np-btn" on:click={prevTrack} aria-label="previous">‹</button>
+      <button class="np-btn play" on:click={togglePlay} aria-label={isPlaying ? 'pause' : 'play'}>
+        {isPlaying ? '❚❚' : '▶'}
+      </button>
+      <button class="np-btn" on:click={nextTrack} aria-label="next">›</button>
+      <span class="np-title">{currentTrack.title}</span>
+      <span class="np-date">{currentTrack.date}</span>
+    </div>
     <div class="channels-strip">
       {#each channels as c, i}
         <button
@@ -351,7 +378,7 @@
       {/each}
     </div>
     <div class="hint">
-      hold <kbd>SPACE</kbd> · <kbd>1</kbd>–<kbd>5</kbd> · <kbd>←</kbd><kbd>→</kbd> · <kbd>ESC</kbd> for A-side
+      hold <kbd>SPACE</kbd> for buildup · <kbd>1</kbd>–<kbd>5</kbd> jump · <kbd>←</kbd><kbd>→</kbd> · <kbd>ESC</kbd> for A-side
     </div>
   </div>
 </div>
@@ -400,39 +427,56 @@
   /* ── HUD top ───────────────────────────────────────────── */
   .hud-top {
     position: absolute;
-    top: 1rem; left: 1.25rem; right: 1.25rem;
+    top: 1rem; left: 1.25rem;
     z-index: 5;
-    display: flex; justify-content: space-between; align-items: center;
-    gap: 1rem; flex-wrap: wrap;
+    display: flex; gap: 1rem; align-items: center;
     font-size: 0.78rem;
     letter-spacing: 0.2em;
   }
-  .hud-top .left { display: flex; gap: 1rem; align-items: center; }
   .ch-tag { font-weight: 500; }
   .ch-name { color: var(--muted); text-transform: lowercase; }
 
+  /* now-playing media player — bottom HUD, centered above channels */
   .now-playing {
-    display: inline-flex; align-items: center; gap: 0.45rem;
-    padding: 0.35rem 0.65rem;
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    padding: 0.45rem 0.85rem;
     border: 1px solid var(--line);
     border-radius: 999px;
-    font-size: 0.72rem;
+    font-size: 0.78rem;
     color: var(--muted);
-    letter-spacing: 0.08em;
-    max-width: min(60vw, 460px);
+    letter-spacing: 0.06em;
+    max-width: min(90vw, 520px);
+    background: rgba(0,0,0,0.35);
+    backdrop-filter: blur(4px);
   }
-  .now-playing.playing { border-color: var(--accent); color: var(--fg); box-shadow: 0 0 12px rgba(255,43,138,0.2); }
+  .now-playing.playing {
+    border-color: var(--accent);
+    color: var(--fg);
+    box-shadow: 0 0 16px rgba(255,43,138,0.25);
+  }
   .np-btn {
     background: transparent; border: none;
     color: inherit; cursor: pointer;
-    padding: 0.1rem 0.25rem;
+    padding: 0.15rem 0.35rem;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.8rem;
+    font-size: 0.85rem;
+    line-height: 1;
   }
   .np-btn:hover { color: var(--accent); }
-  .np-btn.play  { color: var(--fg); }
-  .np-title { color: var(--fg); margin-left: 0.4rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .np-date  { font-size: 0.65rem; color: var(--muted); opacity: 0.7; }
+  .np-btn.play  { color: var(--fg); font-size: 0.95rem; }
+  .np-title {
+    color: var(--fg);
+    margin-left: 0.5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 14rem;
+  }
+  .np-date  { font-size: 0.7rem; color: var(--muted); opacity: 0.7; }
+  @media (max-width: 540px) {
+    .np-date { display: none; }
+    .np-title { max-width: 8rem; }
+  }
 
   /* ── stage / channel ───────────────────────────────────── */
   .stage {

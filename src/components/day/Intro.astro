@@ -1,5 +1,15 @@
 ---
 import CassetteToggle from '../CassetteToggle.svelte';
+
+// Portraits to rotate through. Each refresh picks a random one client-side.
+// Drop new WebP files into public/photos/about/ and add them to this list.
+const portraits = [
+  '/photos/about/rene.webp',
+  '/photos/about/dsc-0399.webp',
+  '/photos/about/dsc-0852.webp',
+  '/photos/about/dsc-2553.webp',
+];
+const initial = portraits[0]; // first paint; replaced by inline script before paint completes
 ---
 <section class="intro">
   <div class="header-row">
@@ -7,9 +17,16 @@ import CassetteToggle from '../CassetteToggle.svelte';
       Rene<CassetteToggle client:load />
     </h1>
     <figure class="portrait" aria-hidden="true">
-      <img src="/photos/about/rene.jpg" alt="" width="120" height="120" />
+      <img id="rrPortrait" src={initial} alt="" width="120" height="120" />
     </figure>
   </div>
+  <script is:inline define:vars={{ portraits }}>
+    // Pick a random portrait on every page load — runs synchronously before
+    // first paint completes so the user never sees a flash of the wrong photo.
+    const pick = portraits[Math.floor(Math.random() * portraits.length)];
+    const el = document.getElementById('rrPortrait');
+    if (el) el.src = pick;
+  </script>
   <div class="bio">
     <p>
       My name is Rene Ramirez. I love to tinker with technology &mdash; born in
