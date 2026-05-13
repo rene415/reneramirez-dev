@@ -33,3 +33,4 @@ public/music/*.mp3
 public/music/*.ogg
 public/music/*.flac
 public/music/*.m4a
+.claude/
