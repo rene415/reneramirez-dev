@@ -205,6 +205,25 @@
     click(t + 0.13,  1500, 0.05, 0.30);   // shutter close / mirror down
   }
 
+  // ── random channel on Night entry ─────────────────────────────
+  // Every time the user flips into Night, land on a random channel
+  // instead of always starting at Decks. Picks index, resets the
+  // no-repeat-track tracker, glitches the title in, fires per-channel
+  // side effects (visualizer toggle, camera shutter, etc.).
+  function pickRandomChannel() {
+    const newIndex = Math.floor(Math.random() * channels.length);
+    index = newIndex;
+    lastPlayedIdx = -1;
+    glitchTitle(channels[newIndex].name);
+    onChannelEnter(channels[newIndex].id);
+  }
+
+  // Shared "we just entered Night" routine — random channel + maybe music
+  function onEnterNight() {
+    pickRandomChannel();
+    if (soundOn) playRandomFromChannel();
+  }
+
   // ── on entering a channel: per-channel side effects ───────────
   function onChannelEnter(channelId) {
     // Visualizer: ONLY on Decks (the DJ channel). Manage the RAF so we
@@ -450,7 +469,7 @@
     const obs = new MutationObserver(() => {
       const m = document.body.dataset.mode;
       if (m === 'night') {
-        if (soundOn) playRandomFromChannel();
+        onEnterNight();        // ← new: random channel + music
       } else {
         if (audioEl) { audioEl.pause(); isPlaying = false; }
         if (holding) endHold();
@@ -458,19 +477,20 @@
     });
     obs.observe(document.body, { attributes: true, attributeFilter: ['data-mode'] });
 
-    // Autoplay if we hydrate AFTER mode is already 'night' (client:visible
-    // only triggers once display:none is removed, which happens post-flip).
-    if (document.body.dataset.mode === 'night' && soundOn) {
-      playRandomFromChannel();
+    // First mount runs AFTER client:visible fires, which happens AFTER
+    // the cassette flip set data-mode='night'. So the MutationObserver
+    // above won't see that initial change — explicit check here.
+    if (document.body.dataset.mode === 'night') {
+      onEnterNight();
     }
 
-    // Kick off canvas RAFs. Particles always run (subtle ambient).
-    // Visualizer only runs on Decks — onChannelEnter handles that.
+    // Particles always run (subtle ambient — only visible in Night
+    // because the day-shell hides this whole element).
     setupParticles();
     partRaf = requestAnimationFrame(drawParticles);
-    onChannelEnter(current?.id);
-    glitchTitle(current?.name || '');
     scheduleAmbientGlitch();
+    // The visualizer RAF + initial channel selection are handled by
+    // onEnterNight() below — no need to duplicate here.
 
     return () => {
       window.removeEventListener('rr-sound', onSound);
@@ -518,14 +538,12 @@
   <div class="vignette"  aria-hidden="true"></div>
 
   <div class="hud-top">
-    <span class="ch-tag" style="color: {accentColor}">{current.number}</span>
-    <span class="ch-name">{current.name}</span>
+    <span class="ch-name" style="color: {accentColor}">{current.name}</span>
   </div>
 
   <div class="stage" class:transitioning>
     {#key current.id}
       <article class="channel" data-id={current.id}>
-        <div class="ch-marker" style="color: {accentColor}">{current.number}</div>
         <h2 class="ch-title" style="text-shadow: 0 0 30px rgba(255,43,138,0.35);">
           {displayedTitle || current.name}
         </h2>
@@ -613,7 +631,7 @@
       {#if currentTrack && currentTrack.date}
         <span class="np-date">{currentTrack.date}</span>
       {/if}
-      <span class="np-pool">·  ch {index + 1}  ·  {activeTracks.length} tracks</span>
+      <span class="np-pool">·  {current.name}  ·  {activeTracks.length} tracks</span>
     </div>
     <div class="channels-strip">
       {#each channels as c, i}
@@ -705,8 +723,10 @@
     display: flex; gap: 1rem; align-items: center;
     font-size: 0.78rem; letter-spacing: 0.2em;
   }
-  .ch-tag { font-weight: 500; }
-  .ch-name { color: var(--muted); text-transform: lowercase; }
+  .ch-name {
+    text-transform: lowercase;
+    font-weight: 500;
+  }
 
   /* ── stage / channel content with staggered entrance ───── */
   .stage {
@@ -740,7 +760,6 @@
     to { opacity: 1; transform: translateY(0); }
   }
 
-  .ch-marker { font-size: 0.85rem; letter-spacing: 0.3em; margin-bottom: 0.75rem; }
   .ch-title {
     font-family: 'VT323', monospace;
     font-size: clamp(2.5rem, 9vw, 5rem);
