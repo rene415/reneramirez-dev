@@ -9,11 +9,9 @@
   let holdProgress = 0;
   let transitioning = false;
   let glitchVariant = 'vhs';
-  let framePulse = false;                  // brief drop-flash on frame
+  let framePulse = false;
 
-  // 3-second buildup. Hold SPACE → filter sweeps down, frame thickens
-  // and brightens, then at completion the next song from THIS channel
-  // plays with a filter snap + gain swell ("the drop").
+  // Hold SPACE for 3s → next CHANNEL (random track from its pool) + drop
   const HOLD_MS = 3000;
   let holdStartedAt = 0;
   let rafId = 0;
@@ -22,9 +20,19 @@
   let trackIdx = 0;
   let lastPlayedIdx = -1;
   let isPlaying = false;
-  let soundOn = true;                      // default ON; auto-plays in Night
-  let audioCtx, audioEl, sourceNode, filterNode, gainNode;
+  let soundOn = true;
+  let audioCtx, audioEl, sourceNode, filterNode, gainNode, analyser;
   const GLITCH_VARIANTS = ['vhs', 'rgb', 'corrupt', 'pinch', 'tear'];
+
+  // visualizer / particles canvases
+  let visCanvas, partCanvas;
+  let particles = [];
+  let visRaf = 0, partRaf = 0;
+
+  // glitch text
+  let displayedTitle = '';
+  let glitchInterval = null;
+  let ambientGlitchTimer = null;
 
   $: current = channels[index];
   $: accentColor = accentToVar(current?.accent);
@@ -40,7 +48,7 @@
     }
   }
 
-  // ── audio plumbing ─────────────────────────────────────────
+  // ── audio ──────────────────────────────────────────────────
   function setupAudio() {
     if (audioCtx) return;
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -53,34 +61,24 @@
     filterNode.type = 'lowpass';
     filterNode.frequency.value = 20000;
     filterNode.Q.value = 1.1;
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.78;
     gainNode = audioCtx.createGain();
     gainNode.gain.value = 0.55;
-    sourceNode.connect(filterNode).connect(gainNode).connect(audioCtx.destination);
+    // source → filter → analyser → gain → destination
+    sourceNode
+      .connect(filterNode)
+      .connect(analyser)
+      .connect(gainNode)
+      .connect(audioCtx.destination);
   }
 
-  // Pick a different random index from the channel's pool (no immediate repeat)
-  function pickRandomIdx() {
-    if (activeTracks.length === 0) return 0;
-    if (activeTracks.length === 1) return 0;
-    let i;
-    do { i = Math.floor(Math.random() * activeTracks.length); }
-    while (i === lastPlayedIdx);
-    return i;
-  }
-
-  // Resolve channel + track POOL explicitly, not via reactive vars.
-  // Svelte's `$:` reactivity is batched: inside the function that just
-  // changed `index`, the reactive `activeTracks` / `currentTrack` are
-  // still pointing at the OLD channel's data. That was causing the
-  // audio file and displayed title to disagree.
-  // Also fire-and-forget audio: play() can take seconds on first load,
-  // so never await it from transition functions.
   function playRandomFromChannel(channelIdx = index) {
     const channel = channels[channelIdx];
     if (!channel) return;
     const pool = channelTracks[channel.id] || [];
     if (!pool.length) return;
-
     let newIdx;
     if (pool.length === 1) newIdx = 0;
     else {
@@ -89,33 +87,21 @@
     }
     trackIdx = newIdx;
     lastPlayedIdx = newIdx;
-
     setupAudio();
     if (!audioEl) return;
-    audioEl.src = pool[newIdx].src;     // ← use explicit pool, not reactive var
-
+    audioEl.src = pool[newIdx].src;
     if (!soundOn) return;
-    if (audioCtx.state === 'suspended') {
-      audioCtx.resume().catch(() => {});
-    }
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
     audioEl.play()
       .then(() => { isPlaying = true; })
       .catch(() => { isPlaying = false; });
   }
-
-  function onTrackEnded() {
-    // when a track finishes naturally, pick another random one from THIS channel
-    playRandomFromChannel();
-  }
-
+  function onTrackEnded() { playRandomFromChannel(index); }
   function togglePlay() {
     if (!audioEl) return;
     if (isPlaying) { audioEl.pause(); isPlaying = false; }
-    else { audioEl.play().then(() => { isPlaying = true; }).catch(() => {}); }
+    else { audioEl.play().then(() => isPlaying = true).catch(() => {}); }
   }
-
-  // Hold-space changes the SONG within the current channel (with buildup→drop)
-  function nextSongInChannel() { playRandomFromChannel(); }
 
   // ── filter automation ──────────────────────────────────────
   function holdFilterDown() {
@@ -137,7 +123,6 @@
     filterNode.frequency.setValueAtTime(currentFreq, t);
     gainNode.gain.cancelScheduledValues(t);
     gainNode.gain.setValueAtTime(currentGain, t);
-
     const wasBuilding = currentFreq < 5000 || currentGain < 0.5;
     if (dropMode && wasBuilding) {
       filterNode.frequency.exponentialRampToValueAtTime(20000, t + 0.15);
@@ -189,42 +174,36 @@
     setTimeout(() => { framePulse = false; }, 400);
   }
 
-  // ── channel change ─────────────────────────────────────────
-  // try/finally guarantees `transitioning` resets even if anything throws.
-  // playRandomFromChannel is fire-and-forget — no awaits on audio.
-  async function goChannel(target) {
-    if (transitioning || target === index) return;
+  // ── channel transition (shared) ────────────────────────────
+  async function transitionChannel(targetIdx, isDrop) {
+    if (transitioning) return;
     transitioning = true;
     try {
       glitchVariant = GLITCH_VARIANTS[Math.floor(Math.random() * GLITCH_VARIANTS.length)];
       glitchSound();
-      holdFilterUp(false);
+      holdFilterUp(isDrop);
+      if (isDrop) flashFrame();
       await new Promise((r) => setTimeout(r, 240));
-      index = target;
-      lastPlayedIdx = -1;
-      playRandomFromChannel(target);    // explicit — don't rely on reactive `index`
+      if (targetIdx !== index) {
+        index = targetIdx;
+        lastPlayedIdx = -1;
+        glitchTitle(channels[targetIdx].name);
+      }
+      playRandomFromChannel(targetIdx);
       await new Promise((r) => setTimeout(r, 480));
     } finally {
       transitioning = false;
     }
   }
+  async function goChannel(target) {
+    if (target === index) return;
+    return transitionChannel(target, false);
+  }
   function nextChannel() { goChannel((index + 1) % channels.length); }
   function prevChannel() { goChannel((index - 1 + channels.length) % channels.length); }
-
-  // ── hold-space → in-channel next song with drop ────────────
   async function fireHoldDrop() {
-    transitioning = true;
-    try {
-      glitchVariant = GLITCH_VARIANTS[Math.floor(Math.random() * GLITCH_VARIANTS.length)];
-      glitchSound();
-      holdFilterUp(true);
-      flashFrame();
-      await new Promise((r) => setTimeout(r, 240));
-      playRandomFromChannel();
-      await new Promise((r) => setTimeout(r, 480));
-    } finally {
-      transitioning = false;
-    }
+    const target = (index + 1) % channels.length;
+    return transitionChannel(target, true);
   }
 
   // ── hold loop ──────────────────────────────────────────────
@@ -235,7 +214,7 @@
     if (holdProgress >= 1) {
       holding = false;
       holdProgress = 0;
-      fireHoldDrop();              // ← in-channel next song
+      fireHoldDrop();
       return;
     }
     rafId = requestAnimationFrame(tick);
@@ -253,6 +232,124 @@
     holdProgress = 0;
     cancelAnimationFrame(rafId);
     holdFilterUp(false);
+  }
+
+  // ── glitch text on title ───────────────────────────────────
+  const GLITCH_CHARS = '!@#$%^&*<>?/+=_01';
+  function glitchTitle(target) {
+    if (!target) return;
+    if (glitchInterval) clearInterval(glitchInterval);
+    let frame = 0;
+    const total = 7;
+    glitchInterval = setInterval(() => {
+      if (frame >= total) {
+        displayedTitle = target;
+        clearInterval(glitchInterval);
+        glitchInterval = null;
+        return;
+      }
+      const noiseLevel = (1 - frame / total) * 0.7;
+      displayedTitle = target.split('').map((ch) => {
+        if (ch === ' ') return ' ';
+        return Math.random() < noiseLevel
+          ? GLITCH_CHARS[Math.floor(Math.random() * GLITCH_CHARS.length)]
+          : ch;
+      }).join('');
+      frame++;
+    }, 35);
+  }
+  function scheduleAmbientGlitch() {
+    clearTimeout(ambientGlitchTimer);
+    const delay = 9000 + Math.random() * 8000;
+    ambientGlitchTimer = setTimeout(() => {
+      if (current) glitchTitle(current.name);
+      scheduleAmbientGlitch();
+    }, delay);
+  }
+
+  // ── magnetic hover (Svelte action) ─────────────────────────
+  function magnetize(node, strength = 0.18) {
+    function onMove(e) {
+      const r = node.getBoundingClientRect();
+      const x = e.clientX - r.left - r.width / 2;
+      const y = e.clientY - r.top - r.height / 2;
+      node.style.transform = `translate(${x * strength}px, ${y * strength}px)`;
+    }
+    function onLeave() { node.style.transform = ''; }
+    node.addEventListener('mousemove', onMove);
+    node.addEventListener('mouseleave', onLeave);
+    return {
+      destroy() {
+        node.removeEventListener('mousemove', onMove);
+        node.removeEventListener('mouseleave', onLeave);
+      }
+    };
+  }
+
+  // ── canvases ───────────────────────────────────────────────
+  function sizeCanvas(c) {
+    if (!c) return;
+    c.width = c.offsetWidth;
+    c.height = c.offsetHeight;
+  }
+
+  function drawVisualizer() {
+    visRaf = requestAnimationFrame(drawVisualizer);
+    if (!visCanvas) return;
+    const c = visCanvas.getContext('2d');
+    const w = visCanvas.width;
+    const h = visCanvas.height;
+    c.clearRect(0, 0, w, h);
+    if (!analyser) return;
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(data);
+    // mirror the FFT — symmetric bars rising from baseline
+    const bars = 72;
+    const step = Math.max(1, Math.floor((data.length * 0.65) / bars));
+    const barW = w / bars;
+    for (let i = 0; i < bars; i++) {
+      const v = data[i * step] / 255;
+      const barH = Math.max(1, v * h * 0.95);
+      const grad = c.createLinearGradient(0, h, 0, h - barH);
+      grad.addColorStop(0,    'rgba(255, 43, 138, 0.65)');
+      grad.addColorStop(0.55, 'rgba(0, 240, 255, 0.40)');
+      grad.addColorStop(1,    'rgba(0, 240, 255, 0)');
+      c.fillStyle = grad;
+      c.fillRect(i * barW + 1, h - barH, barW - 2, barH);
+    }
+  }
+
+  function setupParticles() {
+    if (!partCanvas) return;
+    sizeCanvas(partCanvas);
+    const w = partCanvas.width;
+    const h = partCanvas.height;
+    particles = Array.from({ length: 55 }, () => ({
+      x: Math.random() * w,
+      y: Math.random() * h,
+      vx: (Math.random() - 0.5) * 0.12,
+      vy: -Math.random() * 0.45 - 0.08,
+      size: Math.random() * 1.6 + 0.4,
+      alpha: Math.random() * 0.4 + 0.08,
+      color: Math.random() < 0.55 ? '255, 43, 138' : '0, 240, 255',
+    }));
+  }
+  function drawParticles() {
+    partRaf = requestAnimationFrame(drawParticles);
+    if (!partCanvas) return;
+    const c = partCanvas.getContext('2d');
+    const w = partCanvas.width;
+    const h = partCanvas.height;
+    c.clearRect(0, 0, w, h);
+    for (const p of particles) {
+      p.x += p.vx;
+      p.y += p.vy;
+      if (p.y < -10) { p.y = h + 10; p.x = Math.random() * w; }
+      if (p.x < -5)  p.x = w + 5;
+      if (p.x > w + 5) p.x = -5;
+      c.fillStyle = `rgba(${p.color}, ${p.alpha})`;
+      c.fillRect(p.x, p.y, p.size, p.size);
+    }
   }
 
   // ── keyboard ───────────────────────────────────────────────
@@ -276,6 +373,7 @@
 
   // ── mount ──────────────────────────────────────────────────
   onMount(() => {
+    displayedTitle = current?.name || '';
     const onSound = (e) => {
       const wasOff = !soundOn;
       soundOn = !!(e && e.detail);
@@ -287,6 +385,7 @@
     window.addEventListener('rr-sound', onSound);
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup',   onKeyUp);
+    window.addEventListener('resize', setupParticles);
 
     const obs = new MutationObserver(() => {
       const m = document.body.dataset.mode;
@@ -299,68 +398,61 @@
     });
     obs.observe(document.body, { attributes: true, attributeFilter: ['data-mode'] });
 
-    // CRITICAL: NightShell uses client:visible, so it doesn't hydrate
-    // until the .night-shell div is no longer display:none — which only
-    // happens AFTER body[data-mode] has already flipped to 'night'. By
-    // the time we attach the MutationObserver above, the mode change
-    // has already passed. Check current state at mount and start music
-    // if we're already in night.
+    // Autoplay if we hydrate AFTER mode is already 'night' (client:visible
+    // only triggers once display:none is removed, which happens post-flip).
     if (document.body.dataset.mode === 'night' && soundOn) {
       playRandomFromChannel();
     }
+
+    // Kick off canvas RAFs + ambient glitch
+    setupParticles();
+    visRaf  = requestAnimationFrame(drawVisualizer);
+    partRaf = requestAnimationFrame(drawParticles);
+    glitchTitle(current?.name || '');
+    scheduleAmbientGlitch();
 
     return () => {
       window.removeEventListener('rr-sound', onSound);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup',   onKeyUp);
+      window.removeEventListener('resize', setupParticles);
       obs.disconnect();
+      cancelAnimationFrame(visRaf);
+      cancelAnimationFrame(partRaf);
+      clearTimeout(ambientGlitchTimer);
+      if (glitchInterval) clearInterval(glitchInterval);
       if (audioEl) audioEl.pause();
     };
   });
 </script>
 
-<!--
-  Frame buildup — two SVG paths starting at bottom-middle of the viewport,
-  growing in opposite directions along the perimeter and meeting at
-  top-middle when fully drawn. Drop fires at meet-up.
--->
+<!-- Frame buildup — two SVG paths from bottom-middle meeting at top-middle -->
 <svg
   class="frame-buildup"
   class:active={holding}
   class:flashing={framePulse}
-  width="100%"
-  height="100%"
-  viewBox="0 0 100 100"
-  preserveAspectRatio="none"
+  width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none"
   aria-hidden="true"
 >
-  <!-- left half: bottom-middle → bottom-left → top-left → top-middle -->
   <path
     d="M 50,100 L 0,100 L 0,0 L 50,0"
-    fill="none"
-    stroke="currentColor"
-    stroke-width="3"
-    stroke-linecap="square"
-    pathLength="100"
-    stroke-dasharray="100"
+    fill="none" stroke="currentColor" stroke-width="3"
+    stroke-linecap="square" pathLength="100" stroke-dasharray="100"
     stroke-dashoffset={100 - holdProgress * 100}
     vector-effect="non-scaling-stroke"
   />
-  <!-- right half: bottom-middle → bottom-right → top-right → top-middle -->
   <path
     d="M 50,100 L 100,100 L 100,0 L 50,0"
-    fill="none"
-    stroke="currentColor"
-    stroke-width="3"
-    stroke-linecap="square"
-    pathLength="100"
-    stroke-dasharray="100"
+    fill="none" stroke="currentColor" stroke-width="3"
+    stroke-linecap="square" pathLength="100" stroke-dasharray="100"
     stroke-dashoffset={100 - holdProgress * 100}
     vector-effect="non-scaling-stroke"
   />
 </svg>
 
 <div class="night" aria-label="B-side">
+  <!-- background canvases (behind content) -->
+  <canvas bind:this={partCanvas} class="particles" aria-hidden="true"></canvas>
   <div class="scanlines" aria-hidden="true"></div>
   <div class="vignette"  aria-hidden="true"></div>
 
@@ -370,61 +462,65 @@
   </div>
 
   <div class="stage" class:transitioning>
-    <article class="channel" data-id={current.id}>
-      <div class="ch-marker" style="color: {accentColor}">{current.number}</div>
-      <h2 class="ch-title">{current.name}</h2>
-      <p class="ch-tagline" style="color: {accentColor}">{current.tagline}</p>
-      {#if current.body}
-        <p class="ch-body">{current.body}</p>
-      {/if}
-
-      {#if current.alias && current.alias.length}
-        <div class="aliases">
-          {#each current.alias as a, i}
-            <span class="alias" style="color: {accentColor}">{a}</span>
-            {#if i < current.alias.length - 1}<span class="sep">/</span>{/if}
-          {/each}
-        </div>
-      {/if}
-
-      {#if current.facts && current.facts.length}
-        <dl class="facts">
-          {#each current.facts as f}
-            <div class="fact"><dt>{f.k}</dt><dd>{f.v}</dd></div>
-          {/each}
-        </dl>
-      {/if}
-
-      {#if current.links && current.links.length}
-        <ul class="links">
-          {#each current.links as l}
-            <li>
-              <a href={l.url} target="_blank" rel="noopener noreferrer"
-                 style="--ch-accent: {accentColor};">
-                <span class="lbl">{l.label}</span>
-                {#if l.handle}<span class="hdl">{l.handle}</span>{/if}
-              </a>
-            </li>
-          {/each}
-        </ul>
-      {/if}
-
-      {#if current.photos && current.photos.length}
-        <div class="photos">
-          {#each current.photos as p}
-            <figure>
-              <img src={p.src} alt={p.alt} loading="lazy" />
-            </figure>
-          {/each}
-        </div>
-      {:else if current.id === 'lenses'}
-        <p class="photo-empty">
-          [drop photos in <code>public/photos/lenses/</code> and reference them in
-          <code>src/data/channels.ts</code>]
-        </p>
-      {/if}
-    </article>
+    {#key current.id}
+      <article class="channel" data-id={current.id}>
+        <div class="ch-marker" style="color: {accentColor}">{current.number}</div>
+        <h2 class="ch-title" style="text-shadow: 0 0 30px rgba(255,43,138,0.35);">
+          {displayedTitle || current.name}
+        </h2>
+        <p class="ch-tagline" style="color: {accentColor}">{current.tagline}</p>
+        {#if current.body}
+          <p class="ch-body">{current.body}</p>
+        {/if}
+        {#if current.alias && current.alias.length}
+          <div class="aliases">
+            {#each current.alias as a, i}
+              <span class="alias" style="color: {accentColor}">{a}</span>
+              {#if i < current.alias.length - 1}<span class="sep">/</span>{/if}
+            {/each}
+          </div>
+        {/if}
+        {#if current.facts && current.facts.length}
+          <dl class="facts">
+            {#each current.facts as f}
+              <div class="fact"><dt>{f.k}</dt><dd>{f.v}</dd></div>
+            {/each}
+          </dl>
+        {/if}
+        {#if current.links && current.links.length}
+          <ul class="links">
+            {#each current.links as l}
+              <li>
+                <a href={l.url} target="_blank" rel="noopener noreferrer"
+                   use:magnetize={0.15}
+                   style="--ch-accent: {accentColor};">
+                  <span class="lbl">{l.label}</span>
+                  {#if l.handle}<span class="hdl">{l.handle}</span>{/if}
+                </a>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+        {#if current.photos && current.photos.length}
+          <div class="photos">
+            {#each current.photos as p}
+              <figure>
+                <img src={p.src} alt={p.alt} loading="lazy" />
+              </figure>
+            {/each}
+          </div>
+        {:else if current.id === 'lenses'}
+          <p class="photo-empty">
+            [drop photos in <code>public/photos/lenses/</code> and reference them in
+            <code>src/data/channels.ts</code>]
+          </p>
+        {/if}
+      </article>
+    {/key}
   </div>
+
+  <!-- audio visualizer (above particles, below content) -->
+  <canvas bind:this={visCanvas} class="visualizer" aria-hidden="true"></canvas>
 
   <div class="glitch glitch-{glitchVariant}" class:active={transitioning} aria-hidden="true">
     <div class="g-l1"></div>
@@ -456,7 +552,7 @@
       {/each}
     </div>
     <div class="hint">
-      hold <kbd>SPACE</kbd> for next track · <kbd>1</kbd>–<kbd>5</kbd> channels · <kbd>←</kbd><kbd>→</kbd> · <kbd>ESC</kbd> for A-side
+      hold <kbd>SPACE</kbd> next channel · <kbd>1</kbd>–<kbd>5</kbd> jump · <kbd>←</kbd><kbd>→</kbd> · <kbd>ESC</kbd> A-side
     </div>
   </div>
 </div>
@@ -485,20 +581,36 @@
     pointer-events: none; z-index: 2;
   }
 
-  /* ── frame buildup (two lines from bottom-middle to top-middle) ── */
-  .frame-buildup {
-    position: fixed;
-    inset: 0;
+  /* ── particles canvas ──────────────────────────────────── */
+  .particles {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
     pointer-events: none;
-    z-index: 9000;
+    z-index: 1;
+  }
+
+  /* ── audio visualizer canvas ───────────────────────────── */
+  .visualizer {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    width: 100%; height: 200px;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0.55;
+    mix-blend-mode: screen;
+    filter: blur(0.4px);
+  }
+
+  /* ── frame buildup (perimeter SVG, two halves) ─────────── */
+  .frame-buildup {
+    position: fixed; inset: 0;
+    pointer-events: none; z-index: 9000;
     color: var(--accent);
     filter: drop-shadow(0 0 6px currentColor);
     opacity: 0;
     transition: opacity 180ms ease;
   }
-  .frame-buildup.active {
-    opacity: 1;
-  }
+  .frame-buildup.active   { opacity: 1; }
   .frame-buildup.flashing {
     opacity: 1 !important;
     color: #fff;
@@ -507,66 +619,19 @@
       drop-shadow(0 0 36px var(--accent));
     transition: all 380ms cubic-bezier(.2,.85,.4,1);
   }
-  .frame-buildup.flashing path {
-    stroke-width: 6;
-  }
+  .frame-buildup.flashing path { stroke-width: 6; }
 
   /* ── HUD top ───────────────────────────────────────────── */
   .hud-top {
-    position: absolute;
-    top: 1rem; left: 1.25rem;
+    position: absolute; top: 1rem; left: 1.25rem;
     z-index: 5;
     display: flex; gap: 1rem; align-items: center;
-    font-size: 0.78rem;
-    letter-spacing: 0.2em;
+    font-size: 0.78rem; letter-spacing: 0.2em;
   }
   .ch-tag { font-weight: 500; }
   .ch-name { color: var(--muted); text-transform: lowercase; }
 
-  /* now-playing — bottom HUD, centered above channels */
-  .now-playing {
-    display: inline-flex; align-items: center; gap: 0.5rem;
-    padding: 0.45rem 0.95rem;
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    font-size: 0.78rem;
-    color: var(--muted);
-    letter-spacing: 0.06em;
-    max-width: min(94vw, 600px);
-    background: rgba(0,0,0,0.35);
-    backdrop-filter: blur(4px);
-  }
-  .now-playing.playing {
-    border-color: var(--accent);
-    color: var(--fg);
-    box-shadow: 0 0 16px rgba(255,43,138,0.25);
-  }
-  .np-btn {
-    background: transparent; border: none;
-    color: inherit; cursor: pointer;
-    padding: 0.15rem 0.4rem;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.95rem;
-    line-height: 1;
-  }
-  .np-btn:hover { color: var(--accent); }
-  .np-btn.play  { color: var(--fg); }
-  .np-title {
-    color: var(--fg);
-    margin-left: 0.5rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    max-width: 18rem;
-  }
-  .np-date  { font-size: 0.7rem; color: var(--muted); opacity: 0.7; }
-  .np-pool  { font-size: 0.7rem; color: var(--muted); opacity: 0.6; letter-spacing: 0.08em; }
-  @media (max-width: 600px) {
-    .np-pool, .np-date { display: none; }
-    .np-title { max-width: 10rem; }
-  }
-
-  /* ── stage / channel ───────────────────────────────────── */
+  /* ── stage / channel content with staggered entrance ───── */
   .stage {
     position: absolute; inset: 0;
     overflow-y: auto; overflow-x: hidden;
@@ -576,17 +641,26 @@
   }
   .stage::-webkit-scrollbar { width: 0; }
   .stage.transitioning {
-    opacity: 0.2;
-    transform: translateY(8px);
-    filter: blur(2px);
+    opacity: 0.2; transform: translateY(8px); filter: blur(2px);
   }
-  .channel {
-    max-width: 760px; margin: 0 auto;
-    animation: chIn 700ms ease forwards;
+  .channel { max-width: 760px; margin: 0 auto; }
+  /* each direct child fades up with a stagger — #key re-creates the
+     <article> on channel change so animations re-fire from zero */
+  .channel > * {
+    opacity: 0;
+    transform: translateY(14px);
+    animation: stagIn 680ms cubic-bezier(.2,.85,.4,1) forwards;
   }
-  @keyframes chIn {
-    from { opacity: 0; transform: translateY(20px); filter: blur(4px); }
-    to   { opacity: 1; transform: translateY(0);    filter: blur(0); }
+  .channel > *:nth-child(1) { animation-delay: 0ms; }
+  .channel > *:nth-child(2) { animation-delay: 70ms; }
+  .channel > *:nth-child(3) { animation-delay: 140ms; }
+  .channel > *:nth-child(4) { animation-delay: 210ms; }
+  .channel > *:nth-child(5) { animation-delay: 280ms; }
+  .channel > *:nth-child(6) { animation-delay: 350ms; }
+  .channel > *:nth-child(7) { animation-delay: 420ms; }
+  .channel > *:nth-child(8) { animation-delay: 490ms; }
+  @keyframes stagIn {
+    to { opacity: 1; transform: translateY(0); }
   }
 
   .ch-marker { font-size: 0.85rem; letter-spacing: 0.3em; margin-bottom: 0.75rem; }
@@ -594,6 +668,7 @@
     font-family: 'VT323', monospace;
     font-size: clamp(2.5rem, 9vw, 5rem);
     line-height: 1; margin-bottom: 1rem; letter-spacing: 0.02em;
+    font-variant-numeric: tabular-nums;
   }
   .ch-tagline { font-size: clamp(1rem, 2.5vw, 1.2rem); margin-bottom: 1.25rem; letter-spacing: 0.02em; }
   .ch-body { color: var(--muted); line-height: 1.7; max-width: 52ch; margin-bottom: 1.5rem; }
@@ -604,9 +679,8 @@
 
   .facts { display: grid; gap: 0.5rem; margin: 1.5rem 0; max-width: 36rem; }
   .fact {
-    display: grid; grid-template-columns: 11rem 1fr;
-    gap: 1rem; padding: 0.65rem 0;
-    border-top: 1px solid var(--line);
+    display: grid; grid-template-columns: 11rem 1fr; gap: 1rem;
+    padding: 0.65rem 0; border-top: 1px solid var(--line);
     font-size: 0.93rem;
   }
   .fact:last-child { border-bottom: 1px solid var(--line); }
@@ -624,12 +698,13 @@
     padding: 0.85rem 1rem;
     border: 1px solid var(--line);
     border-radius: 3px;
-    transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+    transition: border-color 0.2s ease, background 0.2s ease, transform 0.18s cubic-bezier(.3,1.4,.4,1);
+    will-change: transform;
   }
   .links a:hover {
     border-color: var(--ch-accent, var(--accent));
     background: rgba(255,255,255,0.03);
-    transform: translateX(2px);
+    box-shadow: 0 4px 18px -8px rgba(255,43,138,0.5);
   }
   .links .lbl { color: var(--fg); font-size: 0.95rem; }
   .links .hdl { color: var(--muted); font-size: 0.78rem; }
@@ -645,14 +720,16 @@
     border-radius: 3px;
     overflow: hidden;
     aspect-ratio: 4 / 3;
+    transition: transform 0.4s cubic-bezier(.2,.85,.4,1);
   }
-  .photos img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .photos figure:hover { transform: scale(1.02); border-color: var(--accent); }
+  .photos img { width: 100%; height: 100%; object-fit: cover; display: block;
+                transition: transform 0.6s cubic-bezier(.2,.85,.4,1); }
+  .photos figure:hover img { transform: scale(1.06); }
   .photo-empty {
     margin-top: 1.5rem; color: var(--muted);
-    font-size: 0.85rem;
-    padding: 0.85rem;
-    border: 1px dashed var(--line);
-    border-radius: 3px;
+    font-size: 0.85rem; padding: 0.85rem;
+    border: 1px dashed var(--line); border-radius: 3px;
     max-width: 52ch;
   }
   .photo-empty code {
@@ -662,10 +739,9 @@
 
   /* ── HUD bottom ────────────────────────────────────────── */
   .hud-bottom {
-    position: absolute;
-    left: 0; right: 0; bottom: 0;
+    position: absolute; left: 0; right: 0; bottom: 0;
     padding: 1rem 1.5rem 1.25rem;
-    background: linear-gradient(to top, rgba(0,0,0,0.55), transparent);
+    background: linear-gradient(to top, rgba(0,0,0,0.62), transparent);
     z-index: 6;
     display: grid; gap: 0.7rem; justify-items: center; text-align: center;
   }
@@ -682,10 +758,37 @@
     transition: all 0.2s ease;
     display: grid; place-items: center;
   }
-  .ch-dot:hover { color: var(--fg); border-color: var(--accent); }
+  .ch-dot:hover { color: var(--fg); border-color: var(--accent); transform: translateY(-2px); }
   .ch-dot.active {
     color: var(--bg); background: var(--accent); border-color: var(--accent);
     box-shadow: 0 0 14px rgba(255, 43, 138, 0.4);
+  }
+  .now-playing {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    padding: 0.45rem 0.95rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font-size: 0.78rem;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+    max-width: min(94vw, 600px);
+    background: rgba(0,0,0,0.42);
+    backdrop-filter: blur(6px);
+  }
+  .now-playing.playing { border-color: var(--accent); color: var(--fg); box-shadow: 0 0 16px rgba(255,43,138,0.25); }
+  .np-btn {
+    background: transparent; border: none; color: inherit; cursor: pointer;
+    padding: 0.15rem 0.4rem; font-family: 'JetBrains Mono', monospace;
+    font-size: 0.95rem; line-height: 1;
+  }
+  .np-btn:hover { color: var(--accent); }
+  .np-btn.play  { color: var(--fg); }
+  .np-title { color: var(--fg); margin-left: 0.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 18rem; }
+  .np-date  { font-size: 0.7rem; color: var(--muted); opacity: 0.7; }
+  .np-pool  { font-size: 0.7rem; color: var(--muted); opacity: 0.6; letter-spacing: 0.08em; }
+  @media (max-width: 600px) {
+    .np-pool, .np-date { display: none; }
+    .np-title { max-width: 10rem; }
   }
   .hint { font-size: 0.72rem; color: var(--muted); letter-spacing: 0.08em; }
   .hint kbd {
@@ -698,11 +801,10 @@
     color: var(--fg);
   }
 
-  /* ── glitch overlay (5 variants — same as before) ─────── */
+  /* ── glitch overlay variants ───────────────────────────── */
   .glitch {
     position: absolute; inset: 0;
-    pointer-events: none;
-    z-index: 4;
+    pointer-events: none; z-index: 4;
     opacity: 0;
     transition: opacity 60ms linear;
   }
@@ -732,74 +834,44 @@
   }
 
   .glitch-rgb { mix-blend-mode: screen; }
-  .glitch-rgb .g-l1 { background: rgba(255,43,138,0.45);  animation: rgbShiftR 0.4s ease-in-out infinite; }
-  .glitch-rgb .g-l2 { background: rgba(0,240,255,0.4);    animation: rgbShiftG 0.5s ease-in-out infinite; }
-  .glitch-rgb .g-l3 { background: rgba(77,255,136,0.35);  animation: rgbShiftB 0.55s ease-in-out infinite; }
-  .glitch-rgb .g-static {
-    background-image: repeating-linear-gradient(90deg, rgba(255,255,255,0.04) 0 1px, transparent 1px 4px);
-  }
+  .glitch-rgb .g-l1 { background: rgba(255,43,138,0.45); animation: rgbShiftR 0.4s ease-in-out infinite; }
+  .glitch-rgb .g-l2 { background: rgba(0,240,255,0.4);   animation: rgbShiftG 0.5s ease-in-out infinite; }
+  .glitch-rgb .g-l3 { background: rgba(77,255,136,0.35); animation: rgbShiftB 0.55s ease-in-out infinite; }
+  .glitch-rgb .g-static { background-image: repeating-linear-gradient(90deg, rgba(255,255,255,0.04) 0 1px, transparent 1px 4px); }
   @keyframes rgbShiftR { 0%,100% { transform: translateX(-8px); } 50% { transform: translateX(10px); } }
   @keyframes rgbShiftG { 0%,100% { transform: translateX(8px); }  50% { transform: translateX(-10px); } }
   @keyframes rgbShiftB { 0%,100% { transform: translateY(-4px); } 50% { transform: translateY(6px); } }
 
   .glitch-corrupt .g-l1 {
-    background:
-      linear-gradient(90deg, transparent 12%, var(--accent) 12% 22%, transparent 22% 60%, rgba(0,240,255,0.55) 60% 72%, transparent 72%);
-    height: 14%; top: 32%;
-    animation: corruptShift 0.18s steps(3) infinite;
+    background: linear-gradient(90deg, transparent 12%, var(--accent) 12% 22%, transparent 22% 60%, rgba(0,240,255,0.55) 60% 72%, transparent 72%);
+    height: 14%; top: 32%; animation: corruptShift 0.18s steps(3) infinite;
   }
   .glitch-corrupt .g-l2 {
-    background:
-      linear-gradient(90deg, transparent 5%, rgba(77,255,136,0.6) 5% 18%, transparent 18% 70%, var(--accent) 70% 88%, transparent 88%);
-    height: 8%; top: 55%;
-    animation: corruptShift 0.13s steps(4) infinite reverse;
+    background: linear-gradient(90deg, transparent 5%, rgba(77,255,136,0.6) 5% 18%, transparent 18% 70%, var(--accent) 70% 88%, transparent 88%);
+    height: 8%; top: 55%; animation: corruptShift 0.13s steps(4) infinite reverse;
   }
   .glitch-corrupt .g-l3 {
-    background:
-      linear-gradient(90deg, transparent 30%, rgba(255,183,77,0.5) 30% 38%, transparent 38% 65%, rgba(255,255,255,0.4) 65% 75%, transparent 75%);
-    height: 6%; top: 72%;
-    animation: corruptShift 0.21s steps(5) infinite;
+    background: linear-gradient(90deg, transparent 30%, rgba(255,183,77,0.5) 30% 38%, transparent 38% 65%, rgba(255,255,255,0.4) 65% 75%, transparent 75%);
+    height: 6%; top: 72%; animation: corruptShift 0.21s steps(5) infinite;
   }
   .glitch-corrupt .g-static {
     background-image:
       repeating-linear-gradient(0deg, rgba(255,255,255,0.08) 0 2px, transparent 2px 5px),
       repeating-linear-gradient(90deg, rgba(0,0,0,0.2) 0 1px, transparent 1px 3px);
   }
-  @keyframes corruptShift {
-    0%   { transform: translateX(0)   scaleX(1); }
-    50%  { transform: translateX(-8%) scaleX(0.97); }
-    100% { transform: translateX(6%)  scaleX(1.02); }
-  }
+  @keyframes corruptShift { 0% { transform: translateX(0)   scaleX(1); } 50% { transform: translateX(-8%) scaleX(0.97); } 100% { transform: translateX(6%)  scaleX(1.02); } }
 
   .glitch-pinch .g-l1 { background: var(--bg); animation: pinchTop 0.7s ease-in-out; }
   .glitch-pinch .g-l2 { background: var(--bg); animation: pinchBot 0.7s ease-in-out; }
-  .glitch-pinch .g-l3 {
-    background: rgba(255,255,255,0.85);
-    height: 2px; top: 50%;
-    animation: pinchLine 0.7s ease-in-out;
-    box-shadow: 0 0 12px var(--accent);
-  }
-  @keyframes pinchTop { 0%{height:0;top:0;} 60%{height:48%;top:0;} 100%{height:50%;top:0;} }
-  @keyframes pinchBot { 0%{height:0;bottom:0;top:auto;} 60%{height:48%;bottom:0;top:auto;} 100%{height:50%;bottom:0;top:auto;} }
+  .glitch-pinch .g-l3 { background: rgba(255,255,255,0.85); height: 2px; top: 50%; animation: pinchLine 0.7s ease-in-out; box-shadow: 0 0 12px var(--accent); }
+  @keyframes pinchTop  { 0%{height:0;top:0;} 60%{height:48%;top:0;} 100%{height:50%;top:0;} }
+  @keyframes pinchBot  { 0%{height:0;bottom:0;top:auto;} 60%{height:48%;bottom:0;top:auto;} 100%{height:50%;bottom:0;top:auto;} }
   @keyframes pinchLine { 0%{opacity:0; transform: scaleX(0);} 40%{opacity:1; transform: scaleX(1.05);} 100%{opacity:0; transform: scaleX(0);} }
 
-  .glitch-tear .g-l1 {
-    background: var(--bg);
-    clip-path: polygon(0 0, 100% 0, 100% 45%, 0 55%);
-    animation: tearTop 0.55s ease-in-out;
-  }
-  .glitch-tear .g-l2 {
-    background: var(--bg);
-    clip-path: polygon(0 55%, 100% 45%, 100% 100%, 0 100%);
-    animation: tearBot 0.55s ease-in-out;
-  }
-  .glitch-tear .g-l3 {
-    background: linear-gradient(to right, transparent 0%, rgba(255,255,255,0.65) 50%, transparent 100%);
-    height: 8%; top: 46%;
-    animation: tearStatic 0.55s ease-in-out;
-    mix-blend-mode: screen;
-  }
-  @keyframes tearTop { 0%{transform:translateX(0);} 50%{transform:translateX(-6%);} 100%{transform:translateX(0);} }
-  @keyframes tearBot { 0%{transform:translateX(0);} 50%{transform:translateX(6%);}  100%{transform:translateX(0);} }
+  .glitch-tear .g-l1 { background: var(--bg); clip-path: polygon(0 0, 100% 0, 100% 45%, 0 55%); animation: tearTop 0.55s ease-in-out; }
+  .glitch-tear .g-l2 { background: var(--bg); clip-path: polygon(0 55%, 100% 45%, 100% 100%, 0 100%); animation: tearBot 0.55s ease-in-out; }
+  .glitch-tear .g-l3 { background: linear-gradient(to right, transparent 0%, rgba(255,255,255,0.65) 50%, transparent 100%); height: 8%; top: 46%; animation: tearStatic 0.55s ease-in-out; mix-blend-mode: screen; }
+  @keyframes tearTop    { 0%{transform:translateX(0);} 50%{transform:translateX(-6%);} 100%{transform:translateX(0);} }
+  @keyframes tearBot    { 0%{transform:translateX(0);} 50%{transform:translateX(6%);}  100%{transform:translateX(0);} }
   @keyframes tearStatic { 0%,100%{opacity:0;} 50%{opacity:1;} }
 </style>
