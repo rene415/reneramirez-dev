@@ -68,17 +68,32 @@
     return i;
   }
 
-  // FIRE-AND-FORGET. Never await audio operations from the transition
-  // functions — play() can take seconds to resolve on a slow first-load
-  // of a large MP3, and that was stalling the `transitioning` flag which
-  // blocks all keyboard input (including number keys).
-  function playRandomFromChannel() {
-    if (!activeTracks.length) return;
-    trackIdx = pickRandomIdx();
-    lastPlayedIdx = trackIdx;
+  // Resolve channel + track POOL explicitly, not via reactive vars.
+  // Svelte's `$:` reactivity is batched: inside the function that just
+  // changed `index`, the reactive `activeTracks` / `currentTrack` are
+  // still pointing at the OLD channel's data. That was causing the
+  // audio file and displayed title to disagree.
+  // Also fire-and-forget audio: play() can take seconds on first load,
+  // so never await it from transition functions.
+  function playRandomFromChannel(channelIdx = index) {
+    const channel = channels[channelIdx];
+    if (!channel) return;
+    const pool = channelTracks[channel.id] || [];
+    if (!pool.length) return;
+
+    let newIdx;
+    if (pool.length === 1) newIdx = 0;
+    else {
+      do { newIdx = Math.floor(Math.random() * pool.length); }
+      while (newIdx === lastPlayedIdx);
+    }
+    trackIdx = newIdx;
+    lastPlayedIdx = newIdx;
+
     setupAudio();
     if (!audioEl) return;
-    audioEl.src = currentTrack.src;
+    audioEl.src = pool[newIdx].src;     // ← use explicit pool, not reactive var
+
     if (!soundOn) return;
     if (audioCtx.state === 'suspended') {
       audioCtx.resume().catch(() => {});
@@ -187,7 +202,7 @@
       await new Promise((r) => setTimeout(r, 240));
       index = target;
       lastPlayedIdx = -1;
-      playRandomFromChannel();
+      playRandomFromChannel(target);    // explicit — don't rely on reactive `index`
       await new Promise((r) => setTimeout(r, 480));
     } finally {
       transitioning = false;
@@ -284,6 +299,16 @@
     });
     obs.observe(document.body, { attributes: true, attributeFilter: ['data-mode'] });
 
+    // CRITICAL: NightShell uses client:visible, so it doesn't hydrate
+    // until the .night-shell div is no longer display:none — which only
+    // happens AFTER body[data-mode] has already flipped to 'night'. By
+    // the time we attach the MutationObserver above, the mode change
+    // has already passed. Check current state at mount and start music
+    // if we're already in night.
+    if (document.body.dataset.mode === 'night' && soundOn) {
+      playRandomFromChannel();
+    }
+
     return () => {
       window.removeEventListener('rr-sound', onSound);
       window.removeEventListener('keydown', onKeyDown);
@@ -294,14 +319,46 @@
   });
 </script>
 
-<!-- Frame buildup — border thickens + glows as you hold; flashes on drop -->
-<div
+<!--
+  Frame buildup — two SVG paths starting at bottom-middle of the viewport,
+  growing in opposite directions along the perimeter and meeting at
+  top-middle when fully drawn. Drop fires at meet-up.
+-->
+<svg
   class="frame-buildup"
   class:active={holding}
   class:flashing={framePulse}
-  style="--p: {holdProgress};"
+  width="100%"
+  height="100%"
+  viewBox="0 0 100 100"
+  preserveAspectRatio="none"
   aria-hidden="true"
-></div>
+>
+  <!-- left half: bottom-middle → bottom-left → top-left → top-middle -->
+  <path
+    d="M 50,100 L 0,100 L 0,0 L 50,0"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="3"
+    stroke-linecap="square"
+    pathLength="100"
+    stroke-dasharray="100"
+    stroke-dashoffset={100 - holdProgress * 100}
+    vector-effect="non-scaling-stroke"
+  />
+  <!-- right half: bottom-middle → bottom-right → top-right → top-middle -->
+  <path
+    d="M 50,100 L 100,100 L 100,0 L 50,0"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="3"
+    stroke-linecap="square"
+    pathLength="100"
+    stroke-dasharray="100"
+    stroke-dashoffset={100 - holdProgress * 100}
+    vector-effect="non-scaling-stroke"
+  />
+</svg>
 
 <div class="night" aria-label="B-side">
   <div class="scanlines" aria-hidden="true"></div>
@@ -428,38 +485,30 @@
     pointer-events: none; z-index: 2;
   }
 
-  /* ── frame buildup (replaces SVG perimeter) ────────────── */
-  /* Border thickens and glow intensifies as you hold. On drop, a brief
-     bright flash. No more "going in circles" — it grows in place. */
+  /* ── frame buildup (two lines from bottom-middle to top-middle) ── */
   .frame-buildup {
     position: fixed;
     inset: 0;
     pointer-events: none;
     z-index: 9000;
-    border-style: solid;
-    border-color: var(--accent);
-    border-width: 0px;
+    color: var(--accent);
+    filter: drop-shadow(0 0 6px currentColor);
     opacity: 0;
-    box-shadow:
-      inset 0 0 0 0 rgba(255,43,138,0);
     transition: opacity 180ms ease;
   }
   .frame-buildup.active {
     opacity: 1;
-    /* scale border and glow with --p (0–1) */
-    border-width: calc(var(--p) * 8px);
-    box-shadow:
-      inset 0 0 calc(var(--p) * 50px) calc(var(--p) * 6px) rgba(255,43,138,0.35),
-      0       0 calc(var(--p) * 28px) calc(var(--p) * 2px) rgba(255,43,138,0.45);
   }
   .frame-buildup.flashing {
     opacity: 1 !important;
-    border-width: 14px;
-    border-color: #fff;
-    box-shadow:
-      inset 0 0 120px 30px rgba(255,255,255,0.55),
-      0       0  60px  6px rgba(255,43,138,0.7);
+    color: #fff;
+    filter:
+      drop-shadow(0 0 18px #fff)
+      drop-shadow(0 0 36px var(--accent));
     transition: all 380ms cubic-bezier(.2,.85,.4,1);
+  }
+  .frame-buildup.flashing path {
+    stroke-width: 6;
   }
 
   /* ── HUD top ───────────────────────────────────────────── */
