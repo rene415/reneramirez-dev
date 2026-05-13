@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { channels } from '../../data/channels';
-  import { tracks } from '../../data/music';
+  import { channelTracks } from '../../data/music';
 
   // ── state ──────────────────────────────────────────────────
   let index = 0;
@@ -9,25 +9,27 @@
   let holdProgress = 0;
   let transitioning = false;
   let glitchVariant = 'vhs';
-  // 5-second buildup. Hold SPACE → filter sweeps from 20kHz → 260Hz over
-  // this duration (the "tension"), then at completion the channel changes
-  // and filter snaps back to 20kHz with a gain swell (the "drop").
-  // For quick channel changes without the buildup, use number keys 1–5
-  // or the arrow keys.
-  const HOLD_MS = 5000;
+  let framePulse = false;                  // brief drop-flash on frame
+
+  // 3-second buildup. Hold SPACE → filter sweeps down, frame thickens
+  // and brightens, then at completion the next song from THIS channel
+  // plays with a filter snap + gain swell ("the drop").
+  const HOLD_MS = 3000;
   let holdStartedAt = 0;
   let rafId = 0;
 
   // music
-  let trackIndex = 0;
+  let trackIdx = 0;
+  let lastPlayedIdx = -1;
   let isPlaying = false;
-  let soundOn = false;
+  let soundOn = true;                      // default ON; auto-plays in Night
   let audioCtx, audioEl, sourceNode, filterNode, gainNode;
   const GLITCH_VARIANTS = ['vhs', 'rgb', 'corrupt', 'pinch', 'tear'];
 
   $: current = channels[index];
   $: accentColor = accentToVar(current?.accent);
-  $: currentTrack = tracks[trackIndex];
+  $: activeTracks = channelTracks[current.id] || [];
+  $: currentTrack = activeTracks[trackIdx] || activeTracks[0] || null;
 
   function accentToVar(a) {
     switch (a) {
@@ -38,17 +40,14 @@
     }
   }
 
-  // ── audio plumbing (lazy init on first play) ───────────────
+  // ── audio plumbing ─────────────────────────────────────────
   function setupAudio() {
     if (audioCtx) return;
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     audioEl = new Audio();
-    // 'auto' so the first track starts downloading the moment sound is
-    // enabled — by the time the cassette flip finishes, audio is ready.
     audioEl.preload = 'auto';
     audioEl.crossOrigin = 'anonymous';
-    audioEl.src = currentTrack.src;     // start fetching immediately
-    audioEl.addEventListener('ended', nextTrack);
+    audioEl.addEventListener('ended', onTrackEnded);
     sourceNode = audioCtx.createMediaElementSource(audioEl);
     filterNode = audioCtx.createBiquadFilter();
     filterNode.type = 'lowpass';
@@ -59,37 +58,54 @@
     sourceNode.connect(filterNode).connect(gainNode).connect(audioCtx.destination);
   }
 
-  async function play() {
-    if (!soundOn) return;
-    setupAudio();
-    if (audioCtx.state === 'suspended') await audioCtx.resume();
-    if (!audioEl.src.endsWith(encodeURI(currentTrack.src).split('/').pop())) {
-      audioEl.src = currentTrack.src;
-    }
-    try { await audioEl.play(); isPlaying = true; } catch (_) {}
+  // Pick a different random index from the channel's pool (no immediate repeat)
+  function pickRandomIdx() {
+    if (activeTracks.length === 0) return 0;
+    if (activeTracks.length === 1) return 0;
+    let i;
+    do { i = Math.floor(Math.random() * activeTracks.length); }
+    while (i === lastPlayedIdx);
+    return i;
   }
-  function pause()      { if (audioEl) { audioEl.pause(); isPlaying = false; } }
-  function nextTrack() {
-    trackIndex = (trackIndex + 1) % tracks.length;
-    if (audioEl) { audioEl.src = currentTrack.src; if (isPlaying) audioEl.play(); }
-  }
-  function prevTrack() {
-    trackIndex = (trackIndex - 1 + tracks.length) % tracks.length;
-    if (audioEl) { audioEl.src = currentTrack.src; if (isPlaying) audioEl.play(); }
-  }
-  function togglePlay() { isPlaying ? pause() : play(); }
 
-  // ── filter automation tied to hold ─────────────────────────
+  async function playRandomFromChannel() {
+    if (!activeTracks.length) return;
+    trackIdx = pickRandomIdx();
+    lastPlayedIdx = trackIdx;
+    setupAudio();
+    audioEl.src = currentTrack.src;
+    if (soundOn) {
+      if (audioCtx.state === 'suspended') {
+        try { await audioCtx.resume(); } catch (_) {}
+      }
+      try { await audioEl.play(); isPlaying = true; } catch (_) { isPlaying = false; }
+    }
+  }
+
+  function onTrackEnded() {
+    // when a track finishes naturally, pick another random one from THIS channel
+    playRandomFromChannel();
+  }
+
+  function togglePlay() {
+    if (!audioEl) return;
+    if (isPlaying) { audioEl.pause(); isPlaying = false; }
+    else { audioEl.play().then(() => { isPlaying = true; }).catch(() => {}); }
+  }
+
+  // Hold-space changes the SONG within the current channel (with buildup→drop)
+  function nextSongInChannel() { playRandomFromChannel(); }
+
+  // ── filter automation ──────────────────────────────────────
   function holdFilterDown() {
     if (!filterNode) return;
     const t = audioCtx.currentTime;
     filterNode.frequency.cancelScheduledValues(t);
     filterNode.frequency.setValueAtTime(filterNode.frequency.value, t);
     filterNode.frequency.exponentialRampToValueAtTime(260, t + HOLD_MS / 1000);
-    // soft duck on volume too
     gainNode.gain.cancelScheduledValues(t);
     gainNode.gain.setValueAtTime(gainNode.gain.value, t);
-    gainNode.gain.exponentialRampToValueAtTime(0.32, t + HOLD_MS / 1000);
+    gainNode.gain.exponentialRampToValueAtTime(0.30, t + HOLD_MS / 1000);
   }
   function holdFilterUp(dropMode) {
     if (!filterNode) return;
@@ -101,37 +117,26 @@
     gainNode.gain.cancelScheduledValues(t);
     gainNode.gain.setValueAtTime(currentGain, t);
 
-    // Only stage a real "drop" if there was an actual buildup — i.e.
-    // user held space and the filter is currently muffled. If they
-    // tapped 1–5 or clicked a channel dot without holding, just keep
-    // playing smoothly (no surprise volume burst — that was making
-    // channel changes feel like a new song starting).
     const wasBuilding = currentFreq < 5000 || currentGain < 0.5;
-
     if (dropMode && wasBuilding) {
-      // THE DROP — filter sweeps open over ~150ms (smooth, not a slam),
-      // gain briefly swells then settles
       filterNode.frequency.exponentialRampToValueAtTime(20000, t + 0.15);
-      gainNode.gain.exponentialRampToValueAtTime(0.78, t + 0.1);
+      gainNode.gain.exponentialRampToValueAtTime(0.80, t + 0.10);
       gainNode.gain.exponentialRampToValueAtTime(0.55, t + 0.8);
     } else if (dropMode) {
-      // channel change without buildup — gentle normalize, no drop
       filterNode.frequency.linearRampToValueAtTime(20000, t + 0.1);
       gainNode.gain.linearRampToValueAtTime(0.55, t + 0.1);
     } else {
-      // hold cancelled — graceful return
       filterNode.frequency.exponentialRampToValueAtTime(20000, t + 0.5);
       gainNode.gain.exponentialRampToValueAtTime(0.55, t + 0.5);
     }
   }
 
-  // ── transition glitch (variant + sound) ────────────────────
+  // ── glitch sound ───────────────────────────────────────────
   function glitchSound() {
     if (!soundOn) return;
     setupAudio();
     const ctx = audioCtx;
     const t = ctx.currentTime;
-    // static burst (filtered noise)
     const buf = ctx.createBuffer(1, ctx.sampleRate * 0.22, ctx.sampleRate);
     const d = buf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * 0.5;
@@ -143,36 +148,57 @@
     f.Q.value = 1.5;
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.14, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.12, t + 0.01);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
     src.connect(f).connect(g).connect(ctx.destination);
     src.start(t); src.stop(t + 0.22);
-    // sharp click
     const osc = ctx.createOscillator();
     const og = ctx.createGain();
     osc.type = 'square';
     osc.frequency.setValueAtTime(100 + Math.random() * 80, t);
     og.gain.setValueAtTime(0.0001, t);
-    og.gain.exponentialRampToValueAtTime(0.18, t + 0.004);
+    og.gain.exponentialRampToValueAtTime(0.16, t + 0.004);
     og.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
     osc.connect(og).connect(ctx.destination);
     osc.start(t); osc.stop(t + 0.08);
   }
 
-  async function go(target) {
+  function flashFrame() {
+    framePulse = true;
+    setTimeout(() => { framePulse = false; }, 400);
+  }
+
+  // ── channel change ─────────────────────────────────────────
+  async function goChannel(target) {
     if (transitioning || target === index) return;
     transitioning = true;
     glitchVariant = GLITCH_VARIANTS[Math.floor(Math.random() * GLITCH_VARIANTS.length)];
     glitchSound();
-    holdFilterUp(true);              // ⇦ "the drop"
-    await new Promise((r) => setTimeout(r, 250));
+    // light filter normalize — no big drop on direct channel jumps
+    holdFilterUp(false);
+    await new Promise((r) => setTimeout(r, 240));
     index = target;
-    await new Promise((r) => setTimeout(r, 500));
+    // load new channel's track pool, pick a random one
+    lastPlayedIdx = -1;
+    await playRandomFromChannel();
+    await new Promise((r) => setTimeout(r, 480));
     transitioning = false;
   }
+  function nextChannel() { goChannel((index + 1) % channels.length); }
+  function prevChannel() { goChannel((index - 1 + channels.length) % channels.length); }
 
-  function next() { go((index + 1) % channels.length); }
-  function prev() { go((index - 1 + channels.length) % channels.length); }
+  // ── hold-space → in-channel next song with drop ────────────
+  async function fireHoldDrop() {
+    transitioning = true;
+    glitchVariant = GLITCH_VARIANTS[Math.floor(Math.random() * GLITCH_VARIANTS.length)];
+    glitchSound();
+    holdFilterUp(true);          // the drop (filter snap + gain swell)
+    flashFrame();
+    await new Promise((r) => setTimeout(r, 240));
+    await playRandomFromChannel();
+    await new Promise((r) => setTimeout(r, 480));
+    transitioning = false;
+  }
 
   // ── hold loop ──────────────────────────────────────────────
   function tick(now) {
@@ -182,7 +208,7 @@
     if (holdProgress >= 1) {
       holding = false;
       holdProgress = 0;
-      next();
+      fireHoldDrop();              // ← in-channel next song
       return;
     }
     rafId = requestAnimationFrame(tick);
@@ -191,7 +217,7 @@
     if (holding || transitioning) return;
     holding = true;
     holdStartedAt = performance.now();
-    holdFilterDown();
+    if (audioCtx) holdFilterDown();
     rafId = requestAnimationFrame(tick);
   }
   function endHold() {
@@ -199,12 +225,11 @@
     holding = false;
     holdProgress = 0;
     cancelAnimationFrame(rafId);
-    holdFilterUp(false);             // cancelled — gracefully return
+    holdFilterUp(false);
   }
 
   // ── keyboard ───────────────────────────────────────────────
   function onKeyDown(e) {
-    // Only react in Night mode (component stays mounted across modes)
     if (document.body.dataset.mode !== 'night') return;
     if (e.code === 'Space' && !e.repeat) {
       e.preventDefault();
@@ -212,84 +237,69 @@
     }
     if (e.key >= '1' && e.key <= '5' && !transitioning) {
       const t = parseInt(e.key, 10) - 1;
-      if (t < channels.length) go(t);
+      if (t < channels.length) goChannel(t);
     }
-    if (e.key === 'ArrowRight' && !transitioning) { e.preventDefault(); next(); }
-    if (e.key === 'ArrowLeft'  && !transitioning) { e.preventDefault(); prev(); }
+    if (e.key === 'ArrowRight' && !transitioning) { e.preventDefault(); nextChannel(); }
+    if (e.key === 'ArrowLeft'  && !transitioning) { e.preventDefault(); prevChannel(); }
   }
   function onKeyUp(e) {
     if (document.body.dataset.mode !== 'night') return;
     if (e.code === 'Space') { e.preventDefault(); endHold(); }
   }
 
-  // ── mount / mode-sync ──────────────────────────────────────
+  // ── mount ──────────────────────────────────────────────────
   onMount(() => {
     const onSound = (e) => {
       const wasOff = !soundOn;
       soundOn = !!(e && e.detail);
-      if (!soundOn) { pause(); return; }
-      // Eager setup so AudioContext is ready before user enters Night.
-      // (User just clicked the sound toggle = valid gesture for new AudioContext.)
+      if (!soundOn) { if (audioEl) { audioEl.pause(); isPlaying = false; } return; }
       if (!audioCtx) setupAudio();
-      // If already in Night when sound is enabled, start immediately
-      if (wasOff && document.body.dataset.mode === 'night') play();
+      if (wasOff && document.body.dataset.mode === 'night') playRandomFromChannel();
     };
     soundOn = !!window.__rrSoundOn;
     window.addEventListener('rr-sound', onSound);
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup',   onKeyUp);
 
-    // when the body mode flips to night, start music (if sound is on)
-    const modeObserver = new MutationObserver(() => {
+    const obs = new MutationObserver(() => {
       const m = document.body.dataset.mode;
       if (m === 'night') {
-        if (soundOn) play();
+        if (soundOn) playRandomFromChannel();
       } else {
-        pause();
+        if (audioEl) { audioEl.pause(); isPlaying = false; }
         if (holding) endHold();
       }
     });
-    modeObserver.observe(document.body, { attributes: true, attributeFilter: ['data-mode'] });
+    obs.observe(document.body, { attributes: true, attributeFilter: ['data-mode'] });
 
     return () => {
       window.removeEventListener('rr-sound', onSound);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup',   onKeyUp);
-      modeObserver.disconnect();
-      pause();
+      obs.disconnect();
+      if (audioEl) audioEl.pause();
     };
   });
 </script>
 
-<!-- CRT-frame border — fills around the whole viewport as you hold -->
-<svg
-  class="crt-frame"
+<!-- Frame buildup — border thickens + glows as you hold; flashes on drop -->
+<div
+  class="frame-buildup"
   class:active={holding}
-  viewBox="0 0 100 100"
-  preserveAspectRatio="none"
+  class:flashing={framePulse}
+  style="--p: {holdProgress};"
   aria-hidden="true"
->
-  <rect
-    x="0.5" y="0.5" width="99" height="99"
-    fill="none" stroke="currentColor" stroke-width="1"
-    pathLength="400"
-    stroke-dasharray="400"
-    stroke-dashoffset={400 - holdProgress * 400}
-    vector-effect="non-scaling-stroke"
-  />
-</svg>
+></div>
 
 <div class="night" aria-label="B-side">
   <div class="scanlines" aria-hidden="true"></div>
   <div class="vignette"  aria-hidden="true"></div>
 
-  <!-- hud top — channel index only (now-playing moved to bottom HUD) -->
   <div class="hud-top">
     <span class="ch-tag" style="color: {accentColor}">{current.number}</span>
     <span class="ch-name">{current.name}</span>
   </div>
 
-  <!-- channel content -->
   <div class="stage" class:transitioning>
     <article class="channel" data-id={current.id}>
       <div class="ch-marker" style="color: {accentColor}">{current.number}</div>
@@ -347,7 +357,6 @@
     </article>
   </div>
 
-  <!-- glitch overlay — variant chosen randomly per transition -->
   <div class="glitch glitch-{glitchVariant}" class:active={transitioning} aria-hidden="true">
     <div class="g-l1"></div>
     <div class="g-l2"></div>
@@ -355,30 +364,30 @@
     <div class="g-static"></div>
   </div>
 
-  <!-- bottom HUD: media player + channels + keymap hint -->
   <div class="hud-bottom">
     <div class="now-playing" class:playing={isPlaying}>
-      <button class="np-btn" on:click={prevTrack} aria-label="previous">‹</button>
       <button class="np-btn play" on:click={togglePlay} aria-label={isPlaying ? 'pause' : 'play'}>
         {isPlaying ? '❚❚' : '▶'}
       </button>
-      <button class="np-btn" on:click={nextTrack} aria-label="next">›</button>
-      <span class="np-title">{currentTrack.title}</span>
-      <span class="np-date">{currentTrack.date}</span>
+      <span class="np-title">{currentTrack ? currentTrack.title : '—'}</span>
+      {#if currentTrack && currentTrack.date}
+        <span class="np-date">{currentTrack.date}</span>
+      {/if}
+      <span class="np-pool">·  ch {index + 1}  ·  {activeTracks.length} tracks</span>
     </div>
     <div class="channels-strip">
       {#each channels as c, i}
         <button
           class="ch-dot"
           class:active={i === index}
-          on:click={() => go(i)}
+          on:click={() => goChannel(i)}
           aria-label={`Channel ${i + 1}: ${c.name}`}
           title={`${i + 1}. ${c.name}`}
         >{i + 1}</button>
       {/each}
     </div>
     <div class="hint">
-      hold <kbd>SPACE</kbd> for buildup · <kbd>1</kbd>–<kbd>5</kbd> jump · <kbd>←</kbd><kbd>→</kbd> · <kbd>ESC</kbd> for A-side
+      hold <kbd>SPACE</kbd> for next track · <kbd>1</kbd>–<kbd>5</kbd> channels · <kbd>←</kbd><kbd>→</kbd> · <kbd>ESC</kbd> for A-side
     </div>
   </div>
 </div>
@@ -407,21 +416,38 @@
     pointer-events: none; z-index: 2;
   }
 
-  /* ── CRT frame (fills as you hold) ─────────────────────── */
-  .crt-frame {
-    position: fixed; inset: 0;
-    width: 100%; height: 100%;
-    color: var(--accent);
+  /* ── frame buildup (replaces SVG perimeter) ────────────── */
+  /* Border thickens and glow intensifies as you hold. On drop, a brief
+     bright flash. No more "going in circles" — it grows in place. */
+  .frame-buildup {
+    position: fixed;
+    inset: 0;
     pointer-events: none;
     z-index: 9000;
+    border-style: solid;
+    border-color: var(--accent);
+    border-width: 0px;
     opacity: 0;
-    transition: opacity 200ms ease;
-    filter: drop-shadow(0 0 6px currentColor);
+    box-shadow:
+      inset 0 0 0 0 rgba(255,43,138,0);
+    transition: opacity 180ms ease;
   }
-  .crt-frame.active { opacity: 1; animation: crtFlicker 0.45s ease-in-out infinite; }
-  @keyframes crtFlicker {
-    0%, 100% { opacity: 1; }
-    50%      { opacity: 0.78; }
+  .frame-buildup.active {
+    opacity: 1;
+    /* scale border and glow with --p (0–1) */
+    border-width: calc(var(--p) * 8px);
+    box-shadow:
+      inset 0 0 calc(var(--p) * 50px) calc(var(--p) * 6px) rgba(255,43,138,0.35),
+      0       0 calc(var(--p) * 28px) calc(var(--p) * 2px) rgba(255,43,138,0.45);
+  }
+  .frame-buildup.flashing {
+    opacity: 1 !important;
+    border-width: 14px;
+    border-color: #fff;
+    box-shadow:
+      inset 0 0 120px 30px rgba(255,255,255,0.55),
+      0       0  60px  6px rgba(255,43,138,0.7);
+    transition: all 380ms cubic-bezier(.2,.85,.4,1);
   }
 
   /* ── HUD top ───────────────────────────────────────────── */
@@ -436,16 +462,16 @@
   .ch-tag { font-weight: 500; }
   .ch-name { color: var(--muted); text-transform: lowercase; }
 
-  /* now-playing media player — bottom HUD, centered above channels */
+  /* now-playing — bottom HUD, centered above channels */
   .now-playing {
     display: inline-flex; align-items: center; gap: 0.5rem;
-    padding: 0.45rem 0.85rem;
+    padding: 0.45rem 0.95rem;
     border: 1px solid var(--line);
     border-radius: 999px;
     font-size: 0.78rem;
     color: var(--muted);
     letter-spacing: 0.06em;
-    max-width: min(90vw, 520px);
+    max-width: min(94vw, 600px);
     background: rgba(0,0,0,0.35);
     backdrop-filter: blur(4px);
   }
@@ -457,32 +483,33 @@
   .np-btn {
     background: transparent; border: none;
     color: inherit; cursor: pointer;
-    padding: 0.15rem 0.35rem;
+    padding: 0.15rem 0.4rem;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.85rem;
+    font-size: 0.95rem;
     line-height: 1;
   }
   .np-btn:hover { color: var(--accent); }
-  .np-btn.play  { color: var(--fg); font-size: 0.95rem; }
+  .np-btn.play  { color: var(--fg); }
   .np-title {
     color: var(--fg);
     margin-left: 0.5rem;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    max-width: 14rem;
+    max-width: 18rem;
   }
   .np-date  { font-size: 0.7rem; color: var(--muted); opacity: 0.7; }
-  @media (max-width: 540px) {
-    .np-date { display: none; }
-    .np-title { max-width: 8rem; }
+  .np-pool  { font-size: 0.7rem; color: var(--muted); opacity: 0.6; letter-spacing: 0.08em; }
+  @media (max-width: 600px) {
+    .np-pool, .np-date { display: none; }
+    .np-title { max-width: 10rem; }
   }
 
   /* ── stage / channel ───────────────────────────────────── */
   .stage {
     position: absolute; inset: 0;
     overflow-y: auto; overflow-x: hidden;
-    padding: clamp(4rem, 8vh, 6rem) clamp(1.5rem, 6vw, 4rem) 8rem;
+    padding: clamp(4rem, 8vh, 6rem) clamp(1.5rem, 6vw, 4rem) 10rem;
     z-index: 3;
     transition: opacity 400ms ease, transform 400ms ease, filter 400ms ease;
   }
@@ -579,7 +606,7 @@
     padding: 1rem 1.5rem 1.25rem;
     background: linear-gradient(to top, rgba(0,0,0,0.55), transparent);
     z-index: 6;
-    display: grid; gap: 0.6rem; justify-items: center; text-align: center;
+    display: grid; gap: 0.7rem; justify-items: center; text-align: center;
   }
   .channels-strip { display: flex; gap: 0.6rem; align-items: center; }
   .ch-dot {
@@ -610,7 +637,7 @@
     color: var(--fg);
   }
 
-  /* ── glitch overlay (5 variants) ───────────────────────── */
+  /* ── glitch overlay (5 variants — same as before) ─────── */
   .glitch {
     position: absolute; inset: 0;
     pointer-events: none;
@@ -621,7 +648,6 @@
   .glitch.active { opacity: 1; }
   .glitch > div { position: absolute; inset: 0; }
 
-  /* --- VHS: 3 sliding chromatic bands + static --- */
   .glitch-vhs .g-l1 {
     background: linear-gradient(to bottom, transparent 30%, rgba(255,43,138,0.35) 50%, transparent 70%);
     animation: vhsSlide 0.65s steps(8) infinite;
@@ -635,8 +661,7 @@
     animation: vhsSlide 0.85s steps(6) infinite;
   }
   .glitch-vhs .g-static {
-    background-image:
-      repeating-linear-gradient(0deg, rgba(255,255,255,0.05) 0 1px, transparent 1px 3px);
+    background-image: repeating-linear-gradient(0deg, rgba(255,255,255,0.05) 0 1px, transparent 1px 3px);
     mix-blend-mode: screen;
   }
   @keyframes vhsSlide {
@@ -645,20 +670,17 @@
     100% { transform: translateY(-10%) skewX(-3deg); opacity: 0.5; }
   }
 
-  /* --- RGB-split: three offset solid color layers --- */
   .glitch-rgb { mix-blend-mode: screen; }
   .glitch-rgb .g-l1 { background: rgba(255,43,138,0.45);  animation: rgbShiftR 0.4s ease-in-out infinite; }
   .glitch-rgb .g-l2 { background: rgba(0,240,255,0.4);    animation: rgbShiftG 0.5s ease-in-out infinite; }
   .glitch-rgb .g-l3 { background: rgba(77,255,136,0.35);  animation: rgbShiftB 0.55s ease-in-out infinite; }
   .glitch-rgb .g-static {
-    background-image:
-      repeating-linear-gradient(90deg, rgba(255,255,255,0.04) 0 1px, transparent 1px 4px);
+    background-image: repeating-linear-gradient(90deg, rgba(255,255,255,0.04) 0 1px, transparent 1px 4px);
   }
   @keyframes rgbShiftR { 0%,100% { transform: translateX(-8px); } 50% { transform: translateX(10px); } }
   @keyframes rgbShiftG { 0%,100% { transform: translateX(8px); }  50% { transform: translateX(-10px); } }
   @keyframes rgbShiftB { 0%,100% { transform: translateY(-4px); } 50% { transform: translateY(6px); } }
 
-  /* --- corrupt: random pixel-blocks --- */
   .glitch-corrupt .g-l1 {
     background:
       linear-gradient(90deg, transparent 12%, var(--accent) 12% 22%, transparent 22% 60%, rgba(0,240,255,0.55) 60% 72%, transparent 72%);
@@ -688,15 +710,8 @@
     100% { transform: translateX(6%)  scaleX(1.02); }
   }
 
-  /* --- CRT pinch: vertical collapse like old TV power-off --- */
-  .glitch-pinch .g-l1 {
-    background: var(--bg);
-    animation: pinchTop 0.7s ease-in-out;
-  }
-  .glitch-pinch .g-l2 {
-    background: var(--bg);
-    animation: pinchBot 0.7s ease-in-out;
-  }
+  .glitch-pinch .g-l1 { background: var(--bg); animation: pinchTop 0.7s ease-in-out; }
+  .glitch-pinch .g-l2 { background: var(--bg); animation: pinchBot 0.7s ease-in-out; }
   .glitch-pinch .g-l3 {
     background: rgba(255,255,255,0.85);
     height: 2px; top: 50%;
@@ -705,13 +720,8 @@
   }
   @keyframes pinchTop { 0%{height:0;top:0;} 60%{height:48%;top:0;} 100%{height:50%;top:0;} }
   @keyframes pinchBot { 0%{height:0;bottom:0;top:auto;} 60%{height:48%;bottom:0;top:auto;} 100%{height:50%;bottom:0;top:auto;} }
-  @keyframes pinchLine {
-    0%   { opacity: 0; transform: scaleX(0); }
-    40%  { opacity: 1; transform: scaleX(1.05); }
-    100% { opacity: 0; transform: scaleX(0); }
-  }
+  @keyframes pinchLine { 0%{opacity:0; transform: scaleX(0);} 40%{opacity:1; transform: scaleX(1.05);} 100%{opacity:0; transform: scaleX(0);} }
 
-  /* --- tear: diagonal cut with opposing slide --- */
   .glitch-tear .g-l1 {
     background: var(--bg);
     clip-path: polygon(0 0, 100% 0, 100% 45%, 0 55%);

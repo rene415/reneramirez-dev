@@ -1,13 +1,17 @@
 <script>
   import { onMount } from 'svelte';
 
-  let soundOn = false;
+  let soundOn = true;        // default ON — music autoplays in Night
 
   onMount(() => {
     try {
       const stored = localStorage.getItem('rr.sound');
-      if (stored === 'on') soundOn = true;
+      // null = never set → respect default (ON). Otherwise respect choice.
+      if (stored === 'off') soundOn = false;
       window.__rrSoundOn = soundOn;
+      // Tell subscribers (NightShell etc.) the initial state so they
+      // can spin up audio on the first user gesture.
+      window.dispatchEvent(new CustomEvent('rr-sound', { detail: soundOn }));
     } catch (_) {}
   });
 
