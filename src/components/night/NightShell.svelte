@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { channels } from '../../data/channels';
   import { channelTracks } from '../../data/music';
-  import BrowserFrame from './BrowserFrame.svelte';
+  import BrowserFrame from '../BrowserFrame.svelte';
 
   // ── state ──────────────────────────────────────────────────
   let index = 0;

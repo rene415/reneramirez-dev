@@ -1,118 +1,148 @@
 ---
-type Project = {
-  name: string;
-  role: string;
-  year: string;
-  url: string;
-  blurb: string;
-  placeholder?: boolean;
-};
-
-const projects: Project[] = [
-  {
-    name: 'El Ruben’s Tamales',
-    role: 'Hosting + dev',
-    year: '2023 — ongoing',
-    url: 'https://elrubenstamales.com',
-    blurb: 'Family business. Custom WordPress on a Dockerized stack I run from a closet in the Bay.',
-  },
-  {
-    name: '[Project two]',
-    role: '[Your role]',
-    year: '[Year]',
-    url: '#',
-    blurb: 'More client and side projects coming — drop them in src/data when you’re ready.',
-    placeholder: true,
-  },
-  {
-    name: '[Project three]',
-    role: '[Your role]',
-    year: '[Year]',
-    url: '#',
-    blurb: 'Hosted sites, infrastructure work, anything else you want on the A-side.',
-    placeholder: true,
-  },
-];
+import BrowserFrame from '../BrowserFrame.svelte';
+import { projects } from '../../data/projects';
 ---
 <section class="work" id="work">
   <header class="section-head">
     <span class="section-num">01</span>
     <h2 class="section-title">Selected work</h2>
+    <span class="count">{projects.length} {projects.length === 1 ? 'project' : 'projects'}</span>
   </header>
-  <ul class="grid">
-    {projects.map((p) => (
-      <li class={`tile ${p.placeholder ? 'placeholder' : ''}`}>
-        <a href={p.url} target="_blank" rel="noopener noreferrer" class="tile-link">
-          <div class="tile-meta">
-            <span>{p.year}</span>
-            <span>{p.role}</span>
-          </div>
-          <h3 class="tile-title">{p.name}</h3>
-          <p class="tile-blurb">{p.blurb}</p>
-          <span class="tile-arrow" aria-hidden="true">→</span>
-        </a>
-      </li>
-    ))}
-  </ul>
+
+  {projects.length === 0 ? (
+    <p class="empty">
+      No projects yet. Add entries in <code>src/data/projects.ts</code>.
+    </p>
+  ) : (
+    <ol class="projects">
+      {projects.map((p, i) => (
+        <li class="project">
+          <header class="project-head">
+            <span class="idx">{String(i + 1).padStart(2, '0')}</span>
+            <div class="meta">
+              <h3 class="name">{p.name}</h3>
+              <div class="sub">
+                <span class="role">{p.role}</span>
+                <span class="dot" aria-hidden="true">·</span>
+                <span class="year">{p.year}</span>
+              </div>
+            </div>
+          </header>
+          {p.blurb && <p class="blurb">{p.blurb}</p>}
+          <BrowserFrame client:visible src={p.url} displayUrl={p.displayUrl} />
+        </li>
+      ))}
+    </ol>
+  )}
 </section>
 
 <style>
-  .work { padding: 5rem 0; border-bottom: 1px solid var(--line); }
-  .section-head { display: flex; align-items: baseline; gap: 1rem; margin-bottom: 2.5rem; }
+  .work {
+    padding: 5rem 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+    margin-bottom: 3rem;
+    flex-wrap: wrap;
+  }
   .section-num {
-    font-family: 'VT323', monospace; font-size: 1rem; color: var(--muted); letter-spacing: 0.1em;
+    font-family: 'VT323', monospace;
+    font-size: 1rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
   }
   .section-title {
     font-family: 'IBM Plex Serif', Georgia, serif;
     font-size: clamp(1.5rem, 4vw, 2.5rem);
-    font-weight: 600; letter-spacing: -0.02em;
+    font-weight: 600;
+    letter-spacing: -0.02em;
   }
-  .grid { list-style: none; display: grid; gap: 1.5rem; }
-  @media (min-width: 640px) {
-    .grid { grid-template-columns: 1fr 1fr; }
-  }
-
-  .tile {
-    border: 1px solid var(--line);
-    border-radius: 4px;
-    transition: border-color 0.2s ease, transform 0.2s ease;
-  }
-  .tile:hover { border-color: var(--accent); transform: translateY(-2px); }
-  .tile.placeholder { opacity: 0.55; }
-
-  .tile-link {
-    display: block;
-    padding: 1.5rem 1.5rem 1.75rem;
-    position: relative;
-    height: 100%;
-  }
-  .tile-meta {
-    display: flex; justify-content: space-between;
+  .count {
+    margin-left: auto;
     font-family: 'VT323', monospace;
-    font-size: 0.9rem;
+    font-size: 0.95rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+  }
+
+  .projects {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 4.5rem;
+  }
+  .project {
+    display: grid;
+    gap: 0.9rem;
+  }
+
+  /* header row: numbered index + project name/meta */
+  .project-head {
+    display: grid;
+    grid-template-columns: 3rem 1fr;
+    gap: 1rem;
+    align-items: baseline;
+  }
+  .project-head .idx {
+    font-family: 'VT323', monospace;
+    font-size: 1.2rem;
+    color: var(--accent);
+    letter-spacing: 0.08em;
+    line-height: 1;
+  }
+  .project-head .name {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-size: clamp(1.4rem, 3.2vw, 2rem);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+  }
+  .project-head .sub {
+    margin-top: 0.4rem;
+    font-family: 'VT323', monospace;
+    font-size: 0.95rem;
     color: var(--muted);
     letter-spacing: 0.08em;
-    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
   }
-  .tile-title {
-    font-family: 'IBM Plex Serif', Georgia, serif;
-    font-size: 1.4rem;
-    font-weight: 600;
-    margin-bottom: 0.4rem;
-  }
-  .tile-blurb {
+  .project-head .dot { color: var(--accent); }
+
+  .blurb {
+    grid-column: 2 / -1;
+    margin-left: calc(3rem + 1rem); /* align under the name (idx col + gap) */
     color: var(--muted);
     line-height: 1.6;
-    font-size: 0.95rem;
-    padding-right: 1.5rem;
+    max-width: 56ch;
+    font-size: 1rem;
   }
-  .tile-arrow {
-    position: absolute;
-    right: 1.25rem; bottom: 1.25rem;
+
+  /* mobile: drop the indented blurb */
+  @media (max-width: 540px) {
+    .project-head { grid-template-columns: 1fr; gap: 0.3rem; }
+    .blurb { margin-left: 0; }
+  }
+
+  .empty {
+    color: var(--muted);
+    padding: 2rem;
+    border: 1px dashed var(--line);
+    border-radius: 4px;
+    text-align: center;
     font-family: 'VT323', monospace;
-    color: var(--accent);
-    opacity: 0;
-    transition: opacity 0.2s, transform 0.2s;
+    letter-spacing: 0.05em;
   }
-  .tile:hover .tile-arrow { opacity: 1; transform: translateX(3px); }
+  .empty code {
+    background: rgba(0, 0, 0, 0.05);
+    padding: 1px 6px;
+    border-radius: 2px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85em;
+  }
 </style>

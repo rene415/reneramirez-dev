@@ -10,6 +10,9 @@
   --muted: #5c554c;
   --line: #d8d2c4;
   --accent: #c4571e;
+  /* RGB triplet for the same accent — lets components write
+     rgba(var(--accent-rgb), 0.18) so glows/shadows match the theme. */
+  --accent-rgb: 196, 87, 30;
 
   --transition-mode: 1200ms;
 }
@@ -20,6 +23,7 @@
   --muted: #9a8fbf;
   --line: #2a1e54;
   --accent: #ff2b8a;
+  --accent-rgb: 255, 43, 138;
 }
 
 /* ── resets ─────────────────────────────────────────────────── */

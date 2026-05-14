@@ -51,26 +51,30 @@
 
 <style>
   .bw {
-    /* Fill the (already-widened) parent — channel sets max-width to
-       min(80vw, 1280px) when on Lenses. */
+    /* Fills the parent container — caller is responsible for width
+       (Night/Lenses uses .channel.wide; Day/SelectedWork uses .container). */
     width: 100%;
     margin-top: 1.5rem;
     border-radius: 10px;
     overflow: hidden;
-    background: #0f0820;
+    /* Theme-aware: cream chrome on Day, deep purple on Night. */
+    background: var(--bg);
     border: 1px solid var(--accent);
     box-shadow:
-      0 0 0 1px rgba(255, 43, 138, 0.18),
-      0 14px 50px rgba(0, 0, 0, 0.55),
-      0 0 80px rgba(255, 43, 138, 0.22);
+      0 0 0 1px rgba(var(--accent-rgb), 0.18),
+      0 14px 50px rgba(0, 0, 0, 0.4),
+      0 0 80px rgba(var(--accent-rgb), 0.18);
   }
 
   /* ── chrome ─────────────────────────────────────────────── */
   .chrome {
     display: flex; align-items: center; gap: 0.85rem;
     padding: 0.6rem 0.9rem;
-    background: linear-gradient(180deg, #1a0f33 0%, #0a0420 100%);
-    border-bottom: 1px solid rgba(255, 43, 138, 0.25);
+    /* Subtle accent tint at the top fading to bg — works in both themes. */
+    background: linear-gradient(180deg,
+      color-mix(in oklab, var(--bg), var(--fg) 5%) 0%,
+      color-mix(in oklab, var(--bg), var(--fg) 2%) 100%);
+    border-bottom: 1px solid rgba(var(--accent-rgb), 0.25);
   }
   .dots { display: flex; gap: 0.45rem; }
   .dot {
@@ -87,8 +91,8 @@
     flex: 1;
     display: inline-flex; align-items: center; gap: 0.45rem;
     padding: 0.28rem 0.8rem;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 43, 138, 0.18);
+    background: color-mix(in oklab, var(--bg), var(--fg) 3%);
+    border: 1px solid rgba(var(--accent-rgb), 0.18);
     border-radius: 6px;
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.78rem;
@@ -102,7 +106,7 @@
   }
   .url:hover {
     color: var(--fg);
-    background: rgba(255, 43, 138, 0.08);
+    background: rgba(var(--accent-rgb), 0.08);
     border-color: var(--accent);
   }
   .url:hover .open-hint { opacity: 1; transform: translate(2px, -2px); }
@@ -170,20 +174,20 @@
   .glow-edge {
     position: absolute; inset: 0;
     pointer-events: none;
-    box-shadow: inset 0 0 36px rgba(255, 43, 138, 0.18);
+    box-shadow: inset 0 0 36px rgba(var(--accent-rgb), 0.18);
   }
 
   /* ── go-to-site button beneath the frame ───────────────── */
-  /* Prominent CTA — the only outbound link for this channel.
-     Spans the full width, glows on hover, magenta accent. */
   .go-to-site {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 0.9rem;
     padding: 0.85rem 1.1rem;
-    background: linear-gradient(180deg, #1a0f33 0%, #0a0420 100%);
-    border-top: 1px solid rgba(255, 43, 138, 0.25);
+    background: linear-gradient(180deg,
+      color-mix(in oklab, var(--bg), var(--fg) 5%) 0%,
+      color-mix(in oklab, var(--bg), var(--fg) 2%) 100%);
+    border-top: 1px solid rgba(var(--accent-rgb), 0.25);
     color: var(--muted);
     text-decoration: none;
     font-family: 'JetBrains Mono', monospace;
@@ -194,7 +198,9 @@
   }
   .go-to-site:hover {
     color: var(--fg);
-    background: linear-gradient(180deg, #2a0a4a 0%, #160830 100%);
+    background: linear-gradient(180deg,
+      color-mix(in oklab, var(--bg), var(--accent) 14%) 0%,
+      color-mix(in oklab, var(--bg), var(--accent) 6%) 100%);
     letter-spacing: 0.24em;
   }
   .go-to-site:hover .go-arrow { transform: translate(4px, -4px); }
