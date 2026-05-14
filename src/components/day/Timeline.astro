@@ -1,0 +1,327 @@
+---
+import { timeline } from '../../data/timeline';
+
+// Decade separators are inserted between groups
+const items: ({ kind: 'decade'; label: string } | { kind: 'event'; ev: typeof timeline[number] })[] = [];
+let lastDecade: string | null = null;
+for (const ev of timeline) {
+  if (ev.decade !== lastDecade) {
+    items.push({ kind: 'decade', label: `the ${ev.decade}` });
+    lastDecade = ev.decade;
+  }
+  items.push({ kind: 'event', ev });
+}
+
+const span = timeline[timeline.length - 1].year - timeline[0].year;
+---
+<section class="timeline" id="origin">
+  <header class="section-head">
+    <h2 class="section-title">How I got here</h2>
+    <span class="span">{span} years</span>
+  </header>
+
+  <ol class="track">
+    {items.map((item) => (
+      item.kind === 'decade' ? (
+        <li class="decade">{item.label}</li>
+      ) : (
+        <li class={`event ${item.ev.current ? 'is-current' : ''}`}>
+          <div class="bullet" aria-hidden="true">
+            <span class="dot"></span>
+          </div>
+          <div class="body">
+            <div class="year" data-target={item.ev.year}>{item.ev.year}</div>
+            <p class="headline">{item.ev.headline}</p>
+            <div class="meanwhile">
+              <span class="meanwhile-label">meanwhile in {item.ev.year}:</span>
+              <span class="meanwhile-text">{item.ev.context}</span>
+            </div>
+          </div>
+        </li>
+      )
+    ))}
+  </ol>
+</section>
+
+<!-- anime.js stagger entrance + year counters on scroll-into-view -->
+<script>
+  import { animate } from 'animejs';
+
+  // ── year counters: tick up from 0 when each year enters viewport ──
+  function makeCounter(el: HTMLElement) {
+    const target = parseInt(el.dataset.target || '0', 10);
+    if (!target) return;
+    let started = false;
+    return () => {
+      if (started) return;
+      started = true;
+      const start = performance.now();
+      const duration = 900;
+      el.textContent = '0';
+      function tick(now: number) {
+        const p = Math.min(1, (now - start) / duration);
+        const eased = 1 - Math.pow(1 - p, 3);
+        el.textContent = String(Math.round(target * eased));
+        if (p < 1) requestAnimationFrame(tick);
+        else el.textContent = String(target);
+      }
+      requestAnimationFrame(tick);
+    };
+  }
+
+  function init() {
+    const events = Array.from(document.querySelectorAll<HTMLElement>('.timeline .event'));
+    if (!events.length) return;
+
+    const counters = new Map<Element, () => void>();
+    events.forEach((ev) => {
+      const yearEl = ev.querySelector<HTMLElement>('.year');
+      if (yearEl) {
+        const counter = makeCounter(yearEl);
+        if (counter) counters.set(ev, counter);
+      }
+    });
+
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        const el = entry.target as HTMLElement;
+        // anime.js entrance
+        animate(el, {
+          translateY: [18, 0],
+          opacity: [0, 1],
+          duration: 700,
+          ease: 'out(3)',
+        });
+        // dot scale-in
+        const dot = el.querySelector<HTMLElement>('.dot');
+        if (dot) {
+          animate(dot, {
+            scale: [0, 1],
+            duration: 520,
+            delay: 120,
+            ease: 'out(4)',
+          });
+        }
+        // year counter
+        const counter = counters.get(el);
+        if (counter) setTimeout(counter, 150);
+        observer.unobserve(el);
+      }
+    }, { threshold: 0.25, rootMargin: '0px 0px -10% 0px' });
+
+    events.forEach((el) => observer.observe(el));
+
+    // Decade labels also get a small fade-in
+    document.querySelectorAll<HTMLElement>('.timeline .decade').forEach((el) => {
+      const dec = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            animate(entry.target as HTMLElement, {
+              translateX: [-12, 0],
+              opacity: [0, 0.7],
+              duration: 600,
+              ease: 'out(3)',
+            });
+            dec.unobserve(entry.target);
+          }
+        }
+      }, { threshold: 0.5 });
+      dec.observe(el);
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+</script>
+
+<style>
+  .timeline {
+    padding: 5rem 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  /* Header: title + span on the right */
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+    margin-bottom: 2.5rem;
+    flex-wrap: wrap;
+  }
+  .section-title {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-size: clamp(1.5rem, 4vw, 2.5rem);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+  .span {
+    margin-left: auto;
+    font-family: 'VT323', monospace;
+    font-size: 0.95rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+  }
+
+  /* The track holds the events; ::before draws the vertical line */
+  .track {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    position: relative;
+    max-width: 720px;
+  }
+  .track::before {
+    content: '';
+    position: absolute;
+    left: 0.85rem;
+    top: 0.5rem;
+    bottom: 2.5rem;
+    width: 1px;
+    background: linear-gradient(
+      to bottom,
+      transparent 0,
+      var(--line) 3%,
+      var(--line) 96%,
+      transparent 100%
+    );
+  }
+
+  /* Decade marker — between groups */
+  .decade {
+    padding: 1.75rem 0 0.75rem 2.5rem;
+    font-family: 'VT323', monospace;
+    font-size: 0.85rem;
+    color: var(--muted);
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    position: relative;
+    opacity: 0;  /* anime.js fades in */
+  }
+  .decade:first-child { padding-top: 0; }
+  .decade::before {
+    content: '— ';
+    color: var(--accent);
+  }
+  .decade::after {
+    content: ' —';
+    color: var(--accent);
+  }
+
+  /* Event row */
+  .event {
+    display: grid;
+    grid-template-columns: 2rem 1fr;
+    gap: 0.85rem;
+    padding: 0.6rem 0 1.5rem;
+    opacity: 0;  /* anime.js fades in on scroll-into-view */
+    transform: translateY(18px);
+  }
+  .bullet {
+    position: relative;
+    width: 2rem;
+    height: 1.6rem;  /* aligns dot to the year baseline */
+  }
+  .dot {
+    position: absolute;
+    top: 0.45rem;
+    left: 0.35rem;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--bg);
+    border: 2px solid var(--accent);
+    transform: scale(1);
+    transition: transform 0.2s ease, box-shadow 0.25s ease, background 0.2s ease;
+    z-index: 1;
+  }
+  .event:hover .dot {
+    background: var(--accent);
+    transform: scale(1.3);
+    box-shadow: 0 0 0 5px color-mix(in oklab, var(--accent), transparent 82%);
+  }
+  /* Current year — gentle pulse forever */
+  .is-current .dot {
+    background: var(--accent);
+    animation: currentPulse 2.6s ease-in-out infinite;
+  }
+  @keyframes currentPulse {
+    0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--accent), transparent 50%); transform: scale(1); }
+    50%      { box-shadow: 0 0 0 10px transparent;                                       transform: scale(1.15); }
+  }
+
+  .body { min-width: 0; }
+  .year {
+    font-family: 'VT323', monospace;
+    font-size: 1.05rem;
+    color: var(--accent);
+    letter-spacing: 0.05em;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .headline {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-size: clamp(1rem, 2vw, 1.15rem);
+    color: var(--fg);
+    line-height: 1.45;
+    margin: 0.25rem 0 0;
+    max-width: 56ch;
+  }
+
+  /* meanwhile-card: hidden, expands on hover */
+  .meanwhile {
+    margin-top: 0;
+    padding: 0 0.85rem;
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    border-left: 2px solid var(--accent);
+    background: color-mix(in oklab, var(--bg), var(--fg) 3%);
+    transition:
+      max-height 0.4s ease,
+      opacity 0.3s ease,
+      padding 0.3s ease,
+      margin 0.3s ease;
+  }
+  .event:hover .meanwhile,
+  .event:focus-within .meanwhile,
+  .is-current .meanwhile {
+    margin-top: 0.75rem;
+    padding: 0.7rem 0.85rem;
+    max-height: 240px;
+    opacity: 1;
+  }
+  .meanwhile-label {
+    display: block;
+    font-family: 'VT323', monospace;
+    font-size: 0.78rem;
+    color: var(--muted);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 0.3rem;
+  }
+  .meanwhile-text {
+    display: block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  /* ── Mobile: cards always show 'meanwhile' (no hover affordance) ── */
+  @media (max-width: 600px) {
+    .event { grid-template-columns: 1.6rem 1fr; gap: 0.7rem; padding-bottom: 1.75rem; }
+    .meanwhile {
+      max-height: none;
+      opacity: 1;
+      margin-top: 0.65rem;
+      padding: 0.65rem 0.8rem;
+    }
+    .track::before { left: 0.7rem; }
+    .dot { left: 0.2rem; }
+    .decade { padding-left: 2rem; font-size: 0.78rem; }
+  }
+</style>

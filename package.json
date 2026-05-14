@@ -12,6 +12,7 @@
   "dependencies": {
     "@astrojs/svelte": "^5.7.3",
     "@astrojs/tailwind": "^5.1.4",
+    "animejs": "^4.0.2",
     "astro": "^4.16.18",
     "gsap": "^3.12.5",
     "svelte": "^4.2.19",
