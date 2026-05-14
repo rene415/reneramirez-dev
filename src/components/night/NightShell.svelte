@@ -3,6 +3,7 @@
   import { channels } from '../../data/channels';
   import { channelTracks } from '../../data/music';
   import BrowserFrame from '../BrowserFrame.svelte';
+  import GearList from './GearList.svelte';
 
   // ── state ──────────────────────────────────────────────────
   let index = 0;
@@ -33,6 +34,12 @@
   let visCanvas, partCanvas;
   let particles = [];
   let visRaf = 0, partRaf = 0;
+
+  // Twitch live state (Decks channel only)
+  let isLive = false;
+  let liveCheckInterval = null;
+  const TWITCH_USER = 'psychosaucequatch';
+  const TWITCH_PARENT = 'reneramirez.dev';   // must match the public hostname when deployed
 
   // glitch text
   let displayedTitle = '';
@@ -241,6 +248,59 @@
     }
     // Photography: SLR shutter on arrival.
     if (channelId === 'lenses') cameraShutter();
+    // Twitch live check: only relevant on Decks.
+    if (channelId === 'decks') startLiveCheck();
+    else stopLiveCheck();
+  }
+
+  // ── Twitch live detection ──────────────────────────────────
+  // STUB: until you set up the Cloudflare Worker described in
+  // docs/twitch-worker.md (or wherever), this returns false.
+  // When the Worker is up, replace the body of checkTwitchLive()
+  // with a real fetch:
+  //   const r = await fetch('/api/twitch-live');
+  //   const d = await r.json();
+  //   return d.live === true;
+  async function checkTwitchLive() {
+    try {
+      const r = await fetch('/api/twitch-live', { cache: 'no-store' });
+      if (!r.ok) return false;
+      const d = await r.json();
+      return !!d.live;
+    } catch (_) {
+      // No worker yet, or offline — fall through to "not live".
+      return false;
+    }
+  }
+
+  function setLiveState(live) {
+    if (live === isLive) return;
+    isLive = live;
+    if (live) {
+      // Pause our local music — let the Twitch stream's own audio take over.
+      if (audioEl) { audioEl.pause(); isPlaying = false; }
+    } else {
+      // Coming back from live → resume music if sound on and we're on Decks.
+      if (soundOn && current?.id === 'decks') {
+        playRandomFromChannel(index);
+      }
+    }
+  }
+
+  function startLiveCheck() {
+    if (liveCheckInterval) return;
+    // Fire immediately, then every 60 s
+    checkTwitchLive().then(setLiveState);
+    liveCheckInterval = setInterval(() => {
+      checkTwitchLive().then(setLiveState);
+    }, 60_000);
+  }
+  function stopLiveCheck() {
+    if (liveCheckInterval) {
+      clearInterval(liveCheckInterval);
+      liveCheckInterval = null;
+    }
+    if (isLive) isLive = false;
   }
 
   // ── channel transition (shared) ────────────────────────────
@@ -503,6 +563,7 @@
       cancelAnimationFrame(partRaf);
       clearTimeout(ambientGlitchTimer);
       if (glitchInterval) clearInterval(glitchInterval);
+      stopLiveCheck();
       if (audioEl) audioEl.pause();
     };
   });
@@ -544,7 +605,7 @@
 
   <div class="stage" class:transitioning>
     {#key current.id}
-      <article class="channel" class:wide={current.id === 'lenses'} data-id={current.id}>
+      <article class="channel" class:wide={current.id === 'lenses' || current.id === 'studio' || (current.id === 'decks' && isLive)} data-id={current.id}>
         <h2 class="ch-title" style="text-shadow: 0 0 30px rgba(255,43,138,0.35);">
           {displayedTitle || current.name}
         </h2>
@@ -581,6 +642,30 @@
             {/each}
           </ul>
         {/if}
+        {#if current.id === 'decks' && isLive}
+          <!-- Twitch LIVE — full embed replaces the music page while
+               the stream is up. Local music is paused (see setLiveState). -->
+          <div class="twitch-live">
+            <div class="live-pill"><span class="live-dot"></span> LIVE on Twitch</div>
+            <div class="twitch-frame">
+              <iframe
+                src={`https://player.twitch.tv/?channel=${TWITCH_USER}&parent=${TWITCH_PARENT}&autoplay=true&muted=false`}
+                allowfullscreen
+                title="Twitch live stream"
+              ></iframe>
+            </div>
+            <a class="twitch-open"
+               href={`https://twitch.tv/${TWITCH_USER}`}
+               target="_blank" rel="noopener noreferrer">
+              OPEN ON TWITCH ↗
+            </a>
+          </div>
+        {/if}
+
+        {#if current.id === 'studio' && current.gear}
+          <GearList gear={current.gear} accentColor={accentColor} />
+        {/if}
+
         {#if current.id === 'lenses'}
           <!-- Lenses pulls the live gallery from madm3x.com inside a
                vintage browser-window frame. Update src in BrowserFrame
@@ -728,6 +813,70 @@
     text-transform: lowercase;
     font-weight: 500;
   }
+
+  /* ── Twitch live embed (Decks channel only) ───────────── */
+  .twitch-live {
+    margin-top: 1.75rem;
+    display: grid;
+    gap: 0.85rem;
+  }
+  .live-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    align-self: start;
+    padding: 0.35rem 0.85rem;
+    border: 1px solid #ff2424;
+    border-radius: 999px;
+    background: rgba(255, 36, 36, 0.12);
+    color: #ffbcbc;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    box-shadow: 0 0 18px rgba(255, 36, 36, 0.35);
+  }
+  .live-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #ff2424;
+    box-shadow: 0 0 8px #ff2424;
+    animation: livePulse 1.4s ease-in-out infinite;
+  }
+  @keyframes livePulse {
+    0%, 100% { opacity: 1;   transform: scale(1); }
+    50%      { opacity: 0.6; transform: scale(1.4); }
+  }
+  .twitch-frame {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    overflow: hidden;
+    background: #000;
+    box-shadow:
+      0 0 0 1px rgba(var(--accent-rgb), 0.18),
+      0 14px 50px rgba(0, 0, 0, 0.55),
+      0 0 60px rgba(var(--accent-rgb), 0.22);
+  }
+  .twitch-frame iframe {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    border: 0;
+  }
+  .twitch-open {
+    align-self: start;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    letter-spacing: 0.18em;
+    text-decoration: none;
+    border-bottom: 1px dotted var(--accent);
+    padding-bottom: 1px;
+    transition: color 0.2s ease;
+  }
+  .twitch-open:hover { color: var(--fg); }
 
   /* ── stage / channel content with staggered entrance ───── */
   .stage {

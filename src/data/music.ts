@@ -44,8 +44,8 @@ export const channelTracks: Record<string, Track[]> = {
     { src: m('April Fools - Mastered.mp3'),         title: 'April Fools (Mastered)', date: '' },
   ],
 
-  // CH 05 — Now: current state, recent stuff
-  now: [
+  // CH 02 — Studio: production / sketches / studio-room vibes
+  studio: [
     { src: m('11-10-2025 - Nov Has come.mp3'),     title: 'Nov Has Come',     date: '2025-11-10' },
     { src: m('07-15-2025 - finnies and ferb.mp3'), title: 'finnies and ferb', date: '2025-07-15' },
     { src: m('05-25-2024 - La Table.mp3'),         title: 'La Table',         date: '2024-05-25' },
