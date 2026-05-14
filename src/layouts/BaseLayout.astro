@@ -28,8 +28,14 @@ const {
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:wght@400;600&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400;500&family=VT323&display=swap"
       rel="stylesheet"
     />
-    <link rel="icon" type="image/png" href="/logo/rene%20Logo.PNG" />
-    <link rel="apple-touch-icon" href="/logo/rene%20Logo.PNG" />
+    <!-- favicon set: browsers pick the best match. ICO is a multi-size
+         bundle (16/32/48/64/128/256) for legacy + Windows; PNGs are
+         what modern browsers prefer; apple-touch-icon is for iOS
+         home-screen bookmarks. All generated from /logo/rene Logo.PNG. -->
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
   </head>
   <body data-mode="day">
     <slot />
