@@ -236,7 +236,7 @@
   function onChannelEnter(channelId) {
     // Visualizer: ONLY on Decks (the DJ channel). Manage the RAF so we
     // don't waste CPU drawing invisible bars elsewhere.
-    if (channelId === 'decks') {
+    if (channelId === 'music') {
       if (!visRaf) visRaf = requestAnimationFrame(drawVisualizer);
     } else if (visRaf) {
       cancelAnimationFrame(visRaf);
@@ -249,7 +249,7 @@
     // Photography: SLR shutter on arrival.
     if (channelId === 'lenses') cameraShutter();
     // Twitch live check: only relevant on Decks.
-    if (channelId === 'decks') startLiveCheck();
+    if (channelId === 'music') startLiveCheck();
     else stopLiveCheck();
   }
 
@@ -285,7 +285,7 @@
       if (audioEl) { audioEl.pause(); isPlaying = false; }
     } else {
       // Coming back from live → resume music if sound on and we're on Decks.
-      if (soundOn && current?.id === 'decks') {
+      if (soundOn && current?.id === 'music') {
         playRandomFromChannel(index);
       }
     }
@@ -503,7 +503,7 @@
       e.preventDefault();
       startHold();
     }
-    if (e.key >= '1' && e.key <= '5' && !transitioning) {
+    if (e.key >= '1' && e.key <= '4' && !transitioning) {
       const t = parseInt(e.key, 10) - 1;
       if (t < channels.length) goChannel(t);
     }
@@ -609,7 +609,7 @@
 
   <div class="stage" class:transitioning>
     {#key current.id}
-      <article class="channel" class:wide={current.id === 'lenses' || current.id === 'studio' || (current.id === 'decks' && isLive)} data-id={current.id}>
+      <article class="channel" class:wide={current.id === 'lenses' || current.id === 'music'} data-id={current.id}>
         <h2 class="ch-title" style="text-shadow: 0 0 30px rgba(255,43,138,0.35);">
           {displayedTitle || current.name}
         </h2>
@@ -646,9 +646,9 @@
             {/each}
           </ul>
         {/if}
-        {#if current.id === 'decks' && isLive}
-          <!-- Twitch LIVE — full embed replaces the music page while
-               the stream is up. Local music is paused (see setLiveState). -->
+        {#if current.id === 'music' && isLive}
+          <!-- Twitch LIVE — embed drops in above the platform links
+               while the stream is up. Local music auto-pauses. -->
           <div class="twitch-live">
             <div class="live-pill"><span class="live-dot"></span> LIVE on Twitch</div>
             <div class="twitch-frame">
@@ -666,7 +666,7 @@
           </div>
         {/if}
 
-        {#if current.id === 'studio' && current.gear}
+        {#if current.gear}
           <GearList gear={current.gear} accentColor={accentColor} />
         {/if}
 
@@ -735,7 +735,7 @@
       {/each}
     </div>
     <div class="hint">
-      hold <kbd>SPACE</kbd> next channel · <kbd>1</kbd>–<kbd>5</kbd> jump · <kbd>←</kbd><kbd>→</kbd> · <kbd>ESC</kbd> A-side
+      hold <kbd>SPACE</kbd> next channel · <kbd>1</kbd>–<kbd>4</kbd> jump · <kbd>←</kbd><kbd>→</kbd> · <kbd>ESC</kbd> A-side
     </div>
   </div>
 </div>

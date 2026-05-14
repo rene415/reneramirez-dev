@@ -16,11 +16,15 @@ export type Track = {
 const m = (filename: string) => encodeURI('/music/' + filename);
 
 export const channelTracks: Record<string, Track[]> = {
-  // CH 01 — Decks: music & mixes, energetic
-  decks: [
+  // CH 01 — Music: combined pool (decks performance + studio sketches).
+  // 6 tracks rotate randomly with no immediate repeats.
+  music: [
     { src: m('05-18-2025 - Gorillaz Inspired v2.mp3'),  title: 'Gorillaz Inspired v2',     date: '2025-05-18' },
     { src: m('03-14-2025 - challange day.mp3'),         title: 'challange day',            date: '2025-03-14' },
     { src: m('03-05-2025- attention (Remastered).mp3'), title: 'attention (Remastered)',   date: '2025-03-05' },
+    { src: m('11-10-2025 - Nov Has come.mp3'),          title: 'Nov Has Come',             date: '2025-11-10' },
+    { src: m('07-15-2025 - finnies and ferb.mp3'),      title: 'finnies and ferb',         date: '2025-07-15' },
+    { src: m('05-25-2024 - La Table.mp3'),              title: 'La Table',                 date: '2024-05-25' },
   ],
 
   // CH 02 — Lenses: photography (Rene-assigned)
@@ -44,12 +48,6 @@ export const channelTracks: Record<string, Track[]> = {
     { src: m('April Fools - Mastered.mp3'),         title: 'April Fools (Mastered)', date: '' },
   ],
 
-  // CH 02 — Studio: production / sketches / studio-room vibes
-  studio: [
-    { src: m('11-10-2025 - Nov Has come.mp3'),     title: 'Nov Has Come',     date: '2025-11-10' },
-    { src: m('07-15-2025 - finnies and ferb.mp3'), title: 'finnies and ferb', date: '2025-07-15' },
-    { src: m('05-25-2024 - La Table.mp3'),         title: 'La Table',         date: '2024-05-25' },
-  ],
 };
 
 // Legacy flat export — only used by old code paths. Kept just to avoid
