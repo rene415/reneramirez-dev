@@ -261,14 +261,18 @@
   //   const r = await fetch('/api/twitch-live');
   //   const d = await r.json();
   //   return d.live === true;
+  // Absolute URL to the Cloudflare Worker so the call works regardless
+  // of where the site is being served from (local IP during dev,
+  // reneramirez.dev in production). The Worker returns CORS '*'.
+  const TWITCH_LIVE_ENDPOINT = 'https://reneramirez.dev/api/twitch-live';
+
   async function checkTwitchLive() {
     try {
-      const r = await fetch('/api/twitch-live', { cache: 'no-store' });
+      const r = await fetch(TWITCH_LIVE_ENDPOINT, { cache: 'no-store' });
       if (!r.ok) return false;
       const d = await r.json();
       return !!d.live;
     } catch (_) {
-      // No worker yet, or offline — fall through to "not live".
       return false;
     }
   }
