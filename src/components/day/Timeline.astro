@@ -43,18 +43,58 @@ const span = timeline[timeline.length - 1].year - timeline[0].year;
   </ol>
 </section>
 
-<!-- anime.js stagger entrance + year counters on scroll-into-view -->
+<!-- anime.js stagger entrance + year counters + headline decoder on scroll-into-view -->
 <script>
   import { animate } from 'animejs';
 
-  // ── year counters: tick up from 0 when each year enters viewport ──
+  // ── decoder/scrambler — same family as the Night-mode title glitch ──
+  // Chars cycle through random glyphs and 'settle' left-to-right.
+  // Punctuation + whitespace pass through unchanged so the silhouette
+  // of the line stays readable mid-decode.
+  const GLITCH_CHARS = '!@#$%^&*<>?/+=_01ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz';
+
+  function isPunct(c: string) { return /[.,;:!?—–\-'"()]/.test(c); }
+  function isSpace(c: string) { return /\s/.test(c); }
+
+  function scrambleText(s: string) {
+    let out = '';
+    for (const c of s) {
+      if (isSpace(c) || isPunct(c)) out += c;
+      else out += GLITCH_CHARS[Math.floor(Math.random() * GLITCH_CHARS.length)];
+    }
+    return out;
+  }
+
+  function decodeInto(el: HTMLElement, finalText: string) {
+    const stepMs = 35;
+    const duration = Math.min(1500, Math.max(700, finalText.length * 28));
+    const totalSteps = Math.floor(duration / stepMs);
+    let step = 0;
+    const len = finalText.length;
+    const id = window.setInterval(() => {
+      if (step >= totalSteps) {
+        el.textContent = finalText;
+        window.clearInterval(id);
+        return;
+      }
+      const progress = step / totalSteps;
+      const settled = Math.floor(len * progress);
+      let out = '';
+      for (let i = 0; i < len; i++) {
+        const c = finalText[i];
+        if (i < settled || isSpace(c) || isPunct(c)) out += c;
+        else out += GLITCH_CHARS[Math.floor(Math.random() * GLITCH_CHARS.length)];
+      }
+      el.textContent = out;
+      step++;
+    }, stepMs);
+  }
+
+  // ── year counters: 0 → target with ease-out cubic ──
   function makeCounter(el: HTMLElement) {
     const target = parseInt(el.dataset.target || '0', 10);
-    if (!target) return;
-    let started = false;
+    if (!target) return null;
     return () => {
-      if (started) return;
-      started = true;
       const start = performance.now();
       const duration = 900;
       el.textContent = '0';
@@ -73,6 +113,22 @@ const span = timeline[timeline.length - 1].year - timeline[0].year;
     const events = Array.from(document.querySelectorAll<HTMLElement>('.timeline .event'));
     if (!events.length) return;
 
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // Pre-pass: stash original headlines + replace with scrambled placeholders
+    // so users never see the plain text before the decode animation fires.
+    // (The event row itself has opacity:0 until anime.js fades it in, so this
+    // pre-scramble is invisible — it's only relevant if someone JS-inspects.)
+    const headlines = new Map<Element, { el: HTMLElement; final: string }>();
+    events.forEach((ev) => {
+      const hl = ev.querySelector<HTMLElement>('.headline');
+      if (!hl) return;
+      const original = (hl.textContent || '').trim();
+      hl.dataset.final = original;
+      hl.textContent = reducedMotion ? original : scrambleText(original);
+      headlines.set(ev, { el: hl, final: original });
+    });
+
     const counters = new Map<Element, () => void>();
     events.forEach((ev) => {
       const yearEl = ev.querySelector<HTMLElement>('.year');
@@ -86,7 +142,7 @@ const span = timeline[timeline.length - 1].year - timeline[0].year;
       for (const entry of entries) {
         if (!entry.isIntersecting) continue;
         const el = entry.target as HTMLElement;
-        // anime.js entrance
+        // anime.js row entrance
         animate(el, {
           translateY: [18, 0],
           opacity: [0, 1],
@@ -103,16 +159,25 @@ const span = timeline[timeline.length - 1].year - timeline[0].year;
             ease: 'out(4)',
           });
         }
-        // year counter
-        const counter = counters.get(el);
-        if (counter) setTimeout(counter, 150);
+        if (!reducedMotion) {
+          // year counter (numeric)
+          const counter = counters.get(el);
+          if (counter) setTimeout(counter, 150);
+          // headline decoder (text)
+          const hl = headlines.get(el);
+          if (hl) setTimeout(() => decodeInto(hl.el, hl.final), 280);
+        } else {
+          // reduced-motion: just show final values immediately
+          const yearEl = el.querySelector<HTMLElement>('.year');
+          if (yearEl && yearEl.dataset.target) yearEl.textContent = yearEl.dataset.target;
+        }
         observer.unobserve(el);
       }
     }, { threshold: 0.25, rootMargin: '0px 0px -10% 0px' });
 
     events.forEach((el) => observer.observe(el));
 
-    // Decade labels also get a small fade-in
+    // Decade labels — small slide-in from the left
     document.querySelectorAll<HTMLElement>('.timeline .decade').forEach((el) => {
       const dec = new IntersectionObserver((entries) => {
         for (const entry of entries) {
