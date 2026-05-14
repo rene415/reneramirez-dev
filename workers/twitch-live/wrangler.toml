@@ -1,0 +1,16 @@
+# Optional: use this with the Wrangler CLI instead of the dashboard.
+# `npx wrangler deploy` from this directory after `npx wrangler login`.
+
+name = "twitch-live"
+main = "src/index.js"
+compatibility_date = "2024-12-01"
+
+# Replace REPLACE_ME with the ID Cloudflare gives you after
+# `npx wrangler kv:namespace create TWITCH_LIVE_CACHE`
+[[kv_namespaces]]
+binding = "KV"
+id = "REPLACE_ME"
+
+[[routes]]
+pattern   = "reneramirez.dev/api/twitch-live"
+zone_name = "reneramirez.dev"
