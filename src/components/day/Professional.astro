@@ -1,0 +1,449 @@
+---
+import { summary, stats, experience, stack, homelab, certs, resumePdf, resumeFilename } from '../../data/resume';
+---
+<section class="professional" id="professional">
+  <header class="section-head">
+    <span class="section-num">02</span>
+    <h2 class="section-title">Professional</h2>
+    <a class="download" href={resumePdf} download={resumeFilename} aria-label="Download resume PDF">
+      <span class="dl-label">Download resume</span>
+      <span class="dl-icon" aria-hidden="true">↓</span>
+    </a>
+  </header>
+
+  <p class="summary">{summary}</p>
+
+  <!-- ── At a glance (animated counters) ─────────────────── -->
+  <div class="stats" data-animate-stats>
+    {stats.map((s) => (
+      <div class="stat" title={s.context}>
+        <div class="stat-value" data-target={s.value}>{s.value}</div>
+        <div class="stat-label">{s.label}</div>
+      </div>
+    ))}
+  </div>
+
+  <!-- ── Experience (collapsible job cards) ──────────────── -->
+  <div class="block">
+    <h3 class="sub-title">Experience</h3>
+    <div class="jobs">
+      {experience.map((job, i) => (
+        <details class="job" open={i === 0}>
+          <summary>
+            <div class="job-meta">
+              <div class="role">{job.role}</div>
+              <div class="company">{job.company} · <span class="location">{job.location}</span></div>
+            </div>
+            <div class="dates">{job.start} — {job.end}</div>
+            <span class="toggle" aria-hidden="true">+</span>
+          </summary>
+          <ul class="bullets">
+            {job.bullets.map((b) => (
+              <li>
+                <div class="bullet-head">{b.label}.</div>
+                <p class="bullet-body">{b.body}</p>
+                {b.detail && <p class="bullet-detail"><span aria-hidden="true">↳</span> {b.detail}</p>}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ))}
+    </div>
+  </div>
+
+  <!-- ── Stack ───────────────────────────────────────────── -->
+  <div class="block">
+    <h3 class="sub-title">Stack</h3>
+    <dl class="stack">
+      {stack.map((g) => (
+        <div class="stack-row">
+          <dt class="stack-group">{g.group}</dt>
+          <dd class="stack-items">
+            {g.items.map((item) => (
+              <span class="stack-item">{item}</span>
+            ))}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  </div>
+
+  <!-- ── Home lab — meta moment ──────────────────────────── -->
+  <aside class="homelab">
+    <div class="hl-head">
+      <h3 class="hl-title">{homelab.title}</h3>
+      <span class="hl-punch">{homelab.punchline}</span>
+    </div>
+    <p>{homelab.body}</p>
+  </aside>
+
+  <!-- ── Certs ───────────────────────────────────────────── -->
+  <div class="block certs">
+    <h3 class="sub-title">Certifications</h3>
+    <ul class="cert-list">
+      {certs.map((c) => (
+        <li>
+          <span class="cert-name">{c.name}</span>
+          <span class="cert-when">{c.when}</span>
+        </li>
+      ))}
+    </ul>
+  </div>
+</section>
+
+<!-- ── Animated counters (IntersectionObserver, vanilla) ─── -->
+<script is:inline>
+  (() => {
+    const root = document.querySelector('[data-animate-stats]');
+    if (!root) return;
+    const targets = root.querySelectorAll('.stat-value');
+    let fired = false;
+
+    function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+
+    function animate(el) {
+      const target = el.dataset.target || '';
+      // pull the leading integer; preserve any suffix (%, +, h, etc.)
+      const match = target.match(/^(\d+)(.*)$/);
+      if (!match) return;
+      const num = parseInt(match[1], 10);
+      const suffix = match[2];
+      const duration = 1200;
+      const start = performance.now();
+      el.textContent = '0' + suffix;
+      function tick(now) {
+        const p = Math.min(1, (now - start) / duration);
+        const value = Math.floor(num * easeOutCubic(p));
+        el.textContent = value + suffix;
+        if (p < 1) requestAnimationFrame(tick);
+        else el.textContent = target;
+      }
+      requestAnimationFrame(tick);
+    }
+
+    const obs = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting && !fired) {
+          fired = true;
+          targets.forEach(animate);
+          obs.disconnect();
+          break;
+        }
+      }
+    }, { threshold: 0.35 });
+    obs.observe(root);
+  })();
+</script>
+
+<style>
+  .professional {
+    padding: 5rem 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+  }
+  .section-num {
+    font-family: 'VT323', monospace;
+    font-size: 1rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+  }
+  .section-title {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-size: clamp(1.5rem, 4vw, 2.5rem);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+
+  /* Download button — pill, accent-edged */
+  .download {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.55rem 0.95rem;
+    border: 1px solid var(--accent);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--fg);
+    text-decoration: none;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+  }
+  .download:hover {
+    background: var(--accent);
+    color: var(--bg);
+    transform: translateY(-1px);
+  }
+  .dl-icon { font-size: 1rem; line-height: 1; }
+  .download:hover .dl-icon { animation: bob 0.6s ease-in-out infinite; }
+  @keyframes bob { 50% { transform: translateY(2px); } }
+
+  /* Summary paragraph */
+  .summary {
+    color: var(--muted);
+    line-height: 1.7;
+    max-width: 62ch;
+    font-size: clamp(1rem, 2vw, 1.1rem);
+    margin-bottom: 3rem;
+  }
+
+  /* ── Stats — 4-up animated counters ──────────────────── */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    margin: 0 0 3.5rem;
+    padding: 1.25rem 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  @media (max-width: 640px) {
+    .stats { grid-template-columns: repeat(2, 1fr); gap: 1.5rem 1rem; }
+  }
+  .stat { text-align: left; cursor: help; }
+  .stat-value {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-size: clamp(2rem, 5vw, 3rem);
+    font-weight: 600;
+    line-height: 1;
+    color: var(--accent);
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-label {
+    margin-top: 0.4rem;
+    font-family: 'VT323', monospace;
+    font-size: 0.85rem;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  /* ── Section sub-headings ────────────────────────────── */
+  .block { margin: 0 0 3rem; }
+  .sub-title {
+    font-family: 'VT323', monospace;
+    font-size: 0.95rem;
+    color: var(--muted);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--line);
+  }
+
+  /* ── Jobs (collapsible <details>) ────────────────────── */
+  .jobs { display: grid; gap: 0.5rem; }
+  .job {
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    transition: border-color 0.2s ease, background 0.2s ease;
+  }
+  .job:hover { border-color: var(--accent); }
+  .job[open] { background: color-mix(in oklab, var(--bg), var(--fg) 2%); }
+
+  .job > summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 1rem 1.25rem;
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: baseline;
+    gap: 1rem;
+  }
+  .job > summary::-webkit-details-marker { display: none; }
+  .job-meta { min-width: 0; }
+  .role {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-size: 1.15rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .company {
+    font-family: 'VT323', monospace;
+    font-size: 0.9rem;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+    margin-top: 0.15rem;
+  }
+  .location { color: var(--accent); }
+  .dates {
+    font-family: 'VT323', monospace;
+    font-size: 0.92rem;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+  }
+  .toggle {
+    width: 1.5rem; height: 1.5rem;
+    display: grid; place-items: center;
+    color: var(--accent);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.2rem;
+    transition: transform 0.25s cubic-bezier(.2,.85,.4,1);
+  }
+  .job[open] .toggle { transform: rotate(45deg); }
+
+  @media (max-width: 540px) {
+    .job > summary { grid-template-columns: 1fr auto; }
+    .dates { grid-column: 1 / -1; margin-top: 0.5rem; }
+  }
+
+  .bullets {
+    list-style: none;
+    padding: 0 1.25rem 1.25rem 1.25rem;
+    margin: 0;
+    display: grid;
+    gap: 1.1rem;
+    border-top: 1px dashed var(--line);
+    padding-top: 1rem;
+    animation: revealJob 0.35s ease;
+  }
+  @keyframes revealJob {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .bullet-head {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-weight: 600;
+    color: var(--fg);
+    font-size: 1rem;
+    display: inline;
+  }
+  .bullet-body {
+    display: inline;
+    color: var(--muted);
+    line-height: 1.6;
+    margin-left: 0.3rem;
+  }
+  .bullet-detail {
+    margin-top: 0.3rem;
+    font-family: 'VT323', monospace;
+    font-size: 0.85rem;
+    color: var(--muted);
+    opacity: 0.75;
+    letter-spacing: 0.04em;
+  }
+
+  /* ── Stack ───────────────────────────────────────────── */
+  .stack { display: grid; gap: 0.85rem; margin: 0; }
+  .stack-row {
+    display: grid;
+    grid-template-columns: 11rem 1fr;
+    gap: 1rem;
+    align-items: baseline;
+  }
+  @media (max-width: 540px) {
+    .stack-row { grid-template-columns: 1fr; gap: 0.4rem; }
+  }
+  .stack-group {
+    font-family: 'VT323', monospace;
+    font-size: 0.95rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .stack-items {
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  .stack-item {
+    padding: 0.25rem 0.65rem;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    color: var(--fg);
+    background: color-mix(in oklab, var(--bg), var(--fg) 2%);
+    transition: border-color 0.2s ease, color 0.2s ease, transform 0.15s ease;
+  }
+  .stack-item:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    transform: translateY(-1px);
+  }
+
+  /* ── Home lab callout ────────────────────────────────── */
+  .homelab {
+    margin: 3rem 0;
+    padding: 1.75rem;
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    background: color-mix(in oklab, var(--bg), var(--accent) 4%);
+    position: relative;
+    overflow: hidden;
+  }
+  .homelab::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      repeating-linear-gradient(45deg,
+        transparent 0 14px,
+        color-mix(in oklab, var(--bg), var(--accent) 8%) 14px 15px);
+    opacity: 0.4;
+    pointer-events: none;
+  }
+  .homelab > * { position: relative; z-index: 1; }
+  .hl-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    margin-bottom: 0.75rem;
+  }
+  .hl-title {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-size: clamp(1.05rem, 2.5vw, 1.35rem);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .hl-punch {
+    font-family: 'VT323', monospace;
+    font-size: 0.95rem;
+    color: var(--accent);
+    letter-spacing: 0.08em;
+  }
+  .homelab p {
+    color: var(--muted);
+    line-height: 1.65;
+    max-width: 70ch;
+  }
+
+  /* ── Certs ───────────────────────────────────────────── */
+  .cert-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 0.5rem;
+    max-width: 32rem;
+  }
+  .cert-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 0.55rem 0;
+    border-top: 1px solid var(--line);
+    font-size: 0.95rem;
+  }
+  .cert-list li:last-child { border-bottom: 1px solid var(--line); }
+  .cert-name { color: var(--fg); font-weight: 500; }
+  .cert-when {
+    font-family: 'VT323', monospace;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+  }
+</style>
