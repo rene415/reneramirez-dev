@@ -5,12 +5,15 @@
 
   export let src = 'https://madm3x.com';
   export let displayUrl = 'madm3x.com';
+  // compact = ~30% shorter screen height — used in grid layouts
+  // (e.g. Day-side Selected Work) where multiple frames stack 2-up.
+  export let compact = false;
 
   let key = 0;  // bumping this with {#key} forces iframe re-mount
   function refresh() { key++; }
 </script>
 
-<div class="bw">
+<div class="bw" class:compact>
   <div class="chrome">
     <div class="dots" aria-hidden="true">
       <span class="dot red"></span>
@@ -147,11 +150,12 @@
   .screen {
     position: relative;
     width: 100%;
-    /* Taller now that the frame is wider — feels more like an
-       actual browser window, less like a phone preview. */
+    /* Default: tall — wide-format Lenses use. */
     height: min(75vh, 800px);
     background: #ffffff;
   }
+  /* compact mode — 30% shorter, fits in grid layouts */
+  .bw.compact .screen { height: min(52vh, 560px); }
   iframe {
     width: 100%; height: 100%;
     border: 0; display: block;
@@ -220,9 +224,10 @@
   }
 
   @media (max-width: 540px) {
-    .screen      { height: min(60vh, 460px); }
-    .url         { font-size: 0.7rem; padding: 0.2rem 0.55rem; }
-    .url .scheme { display: none; }
-    .go-to-site  { font-size: 0.78rem; padding: 0.7rem 0.85rem; gap: 0.5rem; letter-spacing: 0.12em; }
+    .screen          { height: min(60vh, 460px); }
+    .bw.compact .screen { height: min(50vh, 380px); }
+    .url             { font-size: 0.7rem; padding: 0.2rem 0.55rem; }
+    .url .scheme     { display: none; }
+    .go-to-site      { font-size: 0.78rem; padding: 0.7rem 0.85rem; gap: 0.5rem; letter-spacing: 0.12em; }
   }
 </style>

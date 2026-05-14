@@ -1,39 +1,61 @@
 ---
 import BrowserFrame from '../BrowserFrame.svelte';
 import { projects } from '../../data/projects';
+
+const realCount = projects.filter((p) => !p.placeholder).length;
 ---
 <section class="work" id="work">
   <header class="section-head">
     <span class="section-num">01</span>
     <h2 class="section-title">Selected work</h2>
-    <span class="count">{projects.length} {projects.length === 1 ? 'project' : 'projects'}</span>
+    <span class="count">{realCount} live · {projects.length - realCount} reserved</span>
   </header>
 
-  {projects.length === 0 ? (
-    <p class="empty">
-      No projects yet. Add entries in <code>src/data/projects.ts</code>.
-    </p>
-  ) : (
-    <ol class="projects">
-      {projects.map((p, i) => (
-        <li class="project">
-          <header class="project-head">
-            <span class="idx">{String(i + 1).padStart(2, '0')}</span>
-            <div class="meta">
-              <h3 class="name">{p.name}</h3>
-              <div class="sub">
-                <span class="role">{p.role}</span>
-                <span class="dot" aria-hidden="true">·</span>
-                <span class="year">{p.year}</span>
-              </div>
+  <ol class="projects">
+    {projects.map((p, i) => (
+      <li class={`project ${p.placeholder ? 'is-placeholder' : ''}`}>
+        <header class="project-head">
+          <span class="idx">{String(i + 1).padStart(2, '0')}</span>
+          <div class="meta">
+            <h3 class="name">{p.placeholder ? 'Reserved slot' : p.name}</h3>
+            <div class="sub">
+              {p.placeholder ? (
+                <span class="dim">— · slot {i + 1} ·  awaiting site</span>
+              ) : (
+                <>
+                  <span class="role">{p.role}</span>
+                  <span class="dot" aria-hidden="true">·</span>
+                  <span class="year">{p.year}</span>
+                </>
+              )}
             </div>
-          </header>
-          {p.blurb && <p class="blurb">{p.blurb}</p>}
-          <BrowserFrame client:visible src={p.url} displayUrl={p.displayUrl} />
-        </li>
-      ))}
-    </ol>
-  )}
+          </div>
+        </header>
+
+        {!p.placeholder && p.blurb && <p class="blurb">{p.blurb}</p>}
+
+        {p.placeholder ? (
+          <div class="ph-frame" aria-label={`Reserved slot ${i + 1}`}>
+            <div class="ph-chrome">
+              <div class="ph-dots">
+                <span class="ph-dot"></span>
+                <span class="ph-dot"></span>
+                <span class="ph-dot"></span>
+              </div>
+              <div class="ph-url">— reserved —</div>
+            </div>
+            <div class="ph-screen">
+              <span class="ph-msg">site coming</span>
+              <span class="ph-sub">drop the next project in <code>src/data/projects.ts</code></span>
+            </div>
+            <div class="ph-cta">to be revealed</div>
+          </div>
+        ) : (
+          <BrowserFrame client:visible src={p.url} displayUrl={p.displayUrl} compact />
+        )}
+      </li>
+    ))}
+  </ol>
 </section>
 
 <style>
@@ -68,81 +90,147 @@ import { projects } from '../../data/projects';
     letter-spacing: 0.1em;
   }
 
+  /* 2×2 grid (1 column on narrow screens) */
   .projects {
     list-style: none;
-    padding: 0;
-    margin: 0;
+    padding: 0; margin: 0;
     display: grid;
-    gap: 4.5rem;
+    grid-template-columns: 1fr 1fr;
+    gap: 3rem 2.25rem;
   }
-  .project {
-    display: grid;
-    gap: 0.9rem;
+  @media (max-width: 720px) {
+    .projects { grid-template-columns: 1fr; gap: 3.5rem; }
   }
 
-  /* header row: numbered index + project name/meta */
+  .project { display: grid; gap: 0.85rem; }
+
+  /* header row */
   .project-head {
     display: grid;
-    grid-template-columns: 3rem 1fr;
-    gap: 1rem;
+    grid-template-columns: 2.5rem 1fr;
+    gap: 0.75rem;
     align-items: baseline;
   }
   .project-head .idx {
     font-family: 'VT323', monospace;
-    font-size: 1.2rem;
+    font-size: 1.1rem;
     color: var(--accent);
     letter-spacing: 0.08em;
     line-height: 1;
   }
   .project-head .name {
     font-family: 'IBM Plex Serif', Georgia, serif;
-    font-size: clamp(1.4rem, 3.2vw, 2rem);
+    font-size: clamp(1.2rem, 2.5vw, 1.55rem);
     font-weight: 600;
     letter-spacing: -0.02em;
     line-height: 1.15;
   }
   .project-head .sub {
-    margin-top: 0.4rem;
+    margin-top: 0.35rem;
     font-family: 'VT323', monospace;
-    font-size: 0.95rem;
+    font-size: 0.88rem;
     color: var(--muted);
     letter-spacing: 0.08em;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
+    display: flex; align-items: center; gap: 0.5rem;
     flex-wrap: wrap;
   }
   .project-head .dot { color: var(--accent); }
+  .project-head .dim { opacity: 0.6; }
 
   .blurb {
     grid-column: 2 / -1;
-    margin-left: calc(3rem + 1rem); /* align under the name (idx col + gap) */
+    margin-left: calc(2.5rem + 0.75rem);
     color: var(--muted);
-    line-height: 1.6;
-    max-width: 56ch;
-    font-size: 1rem;
+    line-height: 1.55;
+    max-width: 48ch;
+    font-size: 0.95rem;
   }
-
-  /* mobile: drop the indented blurb */
   @media (max-width: 540px) {
-    .project-head { grid-template-columns: 1fr; gap: 0.3rem; }
+    .project-head { grid-template-columns: 1fr; gap: 0.25rem; }
     .blurb { margin-left: 0; }
   }
 
-  .empty {
-    color: var(--muted);
-    padding: 2rem;
+  /* ── placeholder frame ────────────────────────────────── */
+  /* Same outer dimensions as a compact BrowserFrame (.bw.compact),
+     but dashed border + muted styling so it reads as 'reserved'. */
+  .ph-frame {
+    width: 100%;
+    margin-top: 1rem;
+    border-radius: 10px;
+    overflow: hidden;
     border: 1px dashed var(--line);
-    border-radius: 4px;
+    background: color-mix(in oklab, var(--bg), var(--fg) 3%);
+    opacity: 0.78;
+    transition: opacity 0.25s ease, border-color 0.25s ease;
+  }
+  .ph-frame:hover { opacity: 1; border-color: var(--accent); }
+
+  .ph-chrome {
+    display: flex; align-items: center; gap: 0.85rem;
+    padding: 0.6rem 0.9rem;
+    border-bottom: 1px dashed var(--line);
+  }
+  .ph-dots { display: flex; gap: 0.45rem; }
+  .ph-dot {
+    width: 11px; height: 11px;
+    border-radius: 50%;
+    background: var(--line);
+    display: inline-block;
+  }
+  .ph-url {
+    flex: 1;
+    padding: 0.28rem 0.8rem;
+    border: 1px dashed var(--line);
+    border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    color: var(--muted);
     text-align: center;
-    font-family: 'VT323', monospace;
     letter-spacing: 0.05em;
   }
-  .empty code {
-    background: rgba(0, 0, 0, 0.05);
-    padding: 1px 6px;
-    border-radius: 2px;
-    font-family: 'JetBrains Mono', monospace;
+  .ph-screen {
+    height: min(52vh, 560px);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 0.5rem;
+    text-align: center;
+    color: var(--muted);
+    background:
+      repeating-linear-gradient(
+        45deg,
+        transparent 0 12px,
+        color-mix(in oklab, var(--bg), var(--fg) 5%) 12px 13px
+      );
+  }
+  .ph-msg {
+    font-family: 'IBM Plex Serif', Georgia, serif;
+    font-size: 1.25rem;
+    color: var(--fg);
+    letter-spacing: -0.01em;
+    opacity: 0.7;
+  }
+  .ph-sub {
+    font-family: 'VT323', monospace;
+    font-size: 0.8rem;
+    letter-spacing: 0.05em;
+    max-width: 32ch;
+    padding: 0 1rem;
+  }
+  .ph-sub code {
+    background: color-mix(in oklab, var(--bg), var(--fg) 5%);
+    padding: 1px 5px; border-radius: 2px;
     font-size: 0.85em;
+  }
+  .ph-cta {
+    padding: 0.7rem 1rem;
+    text-align: center;
+    border-top: 1px dashed var(--line);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+  }
+  @media (max-width: 540px) {
+    .ph-screen { height: min(50vh, 380px); }
   }
 </style>
