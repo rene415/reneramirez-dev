@@ -4,10 +4,12 @@ const year = new Date().getFullYear();
 ---
 <footer class="footer-day">
   <div class="row">
-    <div class="brand">reneramirez.dev</div>
+    <div class="brand">
+      <img class="brand-logo" src="/logo/rene%20Logo.PNG" alt="RR" width="36" height="30" />
+      <span>reneramirez.dev</span>
+    </div>
     <div class="meta">
       <span>BUILD&nbsp;<b>{buildTime} UTC</b></span>
-      <span>PHASE&nbsp;<b>1 / SKELETON</b></span>
       <span>&copy; {year}</span>
     </div>
   </div>
@@ -28,6 +30,17 @@ const year = new Date().getFullYear();
     font-size: 0.95rem;
     color: var(--muted);
   }
+  .brand {
+    display: inline-flex; align-items: center; gap: 0.6rem;
+  }
+  /* Color-match: rotate the logo's blue (~210°) to Day's burnt orange.
+     Black R/R has no chroma so hue-rotate doesn't affect it. */
+  .brand-logo {
+    height: 30px; width: auto;
+    filter: hue-rotate(169deg) saturate(0.92) brightness(0.95);
+    transition: filter 0.4s ease, transform 0.25s ease;
+  }
+  .brand-logo:hover { transform: rotate(-6deg) scale(1.05); }
   .meta { display: flex; gap: 1.25rem; flex-wrap: wrap; }
   .meta b { color: var(--fg); font-weight: normal; }
 

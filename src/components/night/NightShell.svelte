@@ -604,6 +604,7 @@
   <div class="vignette"  aria-hidden="true"></div>
 
   <div class="hud-top">
+    <img class="hud-logo" src="/logo/reneLogo%20White.PNG" alt="RR" width="24" height="20" />
     <span class="ch-name" style="color: {accentColor}">{current.name}</span>
   </div>
 
@@ -817,6 +818,14 @@
     text-transform: lowercase;
     font-weight: 500;
   }
+  /* Logo in Night HUD — blue circle hue-rotated to magenta accent.
+     White R/R inside stays white (no chroma to shift). */
+  .hud-logo {
+    height: 20px; width: auto;
+    filter: hue-rotate(120deg) saturate(1.15) brightness(1.1);
+    transition: transform 0.25s ease, filter 0.4s ease;
+  }
+  .hud-logo:hover { transform: rotate(6deg) scale(1.1); }
 
   /* ── Twitch live embed (Decks channel only) ───────────── */
   .twitch-live {
