@@ -41,13 +41,10 @@ export const channels: Channel[] = [
       "live sets on twitch when the light's on. mixes on every platform that let me have the name — same person, three spellings, depending on who got there first. all of it built on the rig below: a pair of HS8s in the corner, Ableton on the screen, hands on a Push.",
     alias: ['psychosaucequatch', 'psychosassquatch', 'psychosasquatch'],
     accent: 'magenta',
-    links: [
-      { label: 'Twitch',      url: 'https://www.twitch.tv/psychosaucequatch',         handle: 'psychosaucequatch' },
-      { label: 'SoundCloud',  url: 'https://soundcloud.com/psychosaucequatch',        handle: 'psychosaucequatch' },
-      { label: 'Spotify',     url: 'https://open.spotify.com/artist/0l1iVFMMyljzebyWCPLgHV', handle: 'Psychosassquatch' },
-      { label: 'Apple Music', url: 'https://music.apple.com/us/artist/psychosasquatch/1651102774', handle: 'Psychosasquatch' },
-      { label: 'YouTube',     url: 'https://www.youtube.com/@psychosassquatch',        handle: '@psychosassquatch' },
-    ],
+    // Platform links removed — the embedded psychosassquatch.com browser
+    // frame below the gear has them all. To re-enable: paste the link
+    // objects back here.
+    links: [],
     gear: {
       haves: [
         { name: 'Ableton Live 12',               category: 'DAW',                  icon: 'daw',       blurb: 'the brain' },

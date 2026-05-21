@@ -673,8 +673,7 @@
 
         {#if current.id === 'lenses'}
           <!-- Lenses pulls the live gallery from madm3x.com inside a
-               vintage browser-window frame. Update src in BrowserFrame
-               if the host changes. -->
+               vintage browser-window frame. -->
           <BrowserFrame src="https://madm3x.com" displayUrl="madm3x.com" />
         {:else if current.photos && current.photos.length}
           <div class="photos">
@@ -684,6 +683,13 @@
               </figure>
             {/each}
           </div>
+        {/if}
+
+        {#if current.id === 'music'}
+          <!-- Music channel: embed the live psychosassquatch.com site
+               (artist hub) below the gear. Same browser-window pattern
+               as Lenses → madm3x.com. -->
+          <BrowserFrame src="https://psychosassquatch.com" displayUrl="psychosassquatch.com" />
         {/if}
       </article>
     {/key}
