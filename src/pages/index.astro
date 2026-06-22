@@ -35,9 +35,12 @@ import NightShell from '../components/night/NightShell.svelte';
 <style>
   .container {
     width: 100%;
-    max-width: 920px;
+    /* Full width — no max-width cap. Side padding scales 1.5rem → 4rem
+       so the layout breathes on huge displays. Section content
+       (bio paragraphs, timeline track, contact rows, etc.) stays
+       readable via its own max-width:56ch / 720px constraints. */
     margin: 0 auto;
-    padding: 0 clamp(1.25rem, 4vw, 2rem);
+    padding: 0 clamp(1.5rem, 5vw, 4rem);
   }
   .day-shell, .night-shell {
     transition: opacity 600ms ease;
