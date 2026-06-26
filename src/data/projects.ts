@@ -24,9 +24,18 @@ export const projects: Project[] = [
     blurb:
       'Family business. Custom WordPress on a Dockerized stack I run from a closet in the Bay Area.',
   },
+  {
+    id: 'depth-of-field-studio',
+    name: 'Depth of Field Studio',
+    role: 'Hosting · dev · deploy',
+    year: '2026 — ongoing',
+    url: 'https://learn.madm3x.com',
+    displayUrl: 'learn.madm3x.com',
+    blurb:
+      'Photography learning studio. Static site on a self-hosted container, git-deployed behind Cloudflare.',
+  },
   // Reserved slots — fill them in when sites are ready. Just replace
   // `placeholder: true` with the same shape as the first entry.
-  { id: 'placeholder-2', placeholder: true },
   { id: 'placeholder-3', placeholder: true },
   { id: 'placeholder-4', placeholder: true },
 ];
